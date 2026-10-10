@@ -31,8 +31,8 @@ namespace regex_builder {
     };
 
     enum class NumberCompare {
-        Equal = 1,
-        Greater = 2,
+        Greater = 1,
+        Equal = 2,
         Less = 3,
         Between = 4
     };
@@ -41,12 +41,12 @@ namespace regex_builder {
         Todo = 1,
         StartLine = 2,
         EndLine = 3,
-        CommentedCode = 4,
-        All = 5
+        CommentedCode = 4
     };
 
     struct SearchRequest {
-        patterns::Language Language = patterns::Language::CSharp;
+        std::string Language = "C#";   // ← строка, не enum
+
         SearchType Type = SearchType::Word;
 
         // Тип 1

@@ -1,0 +1,97 @@
+{
+  "default_exclude_dir_set": "Default",
+  "default_exclude_file_set": "None",
+  "default_extension_set": "C++",
+  "default_language": "C#",
+  "default_max_file_size_set": "До 10 МБ",
+  "exclude_dir_sets": {
+    "Default": [
+      "bin",
+      "obj",
+      ".git",
+      ".vs"
+    ],
+    "None": [],
+    "Python": [
+      "__pycache__",
+      ".venv",
+      "venv"
+    ],
+    "Web": [
+      "node_modules",
+      "dist",
+      "build"
+    ]
+  },
+  "exclude_file_sets": {
+    "C#": [
+      "*.FileSearcher.cs",
+      "*.g.cs"
+    ],
+    "None": []
+  },
+  "extension_sets": {
+    "C#": [
+      ".cs"
+    ],
+    "C++": [
+      ".cpp",
+      ".h",
+      ".hpp"
+    ],
+    "Python": [
+      ".py"
+    ],
+    "Web": [
+      ".js",
+      ".ts",
+      ".html",
+      ".css"
+    ]
+  },
+  "fallback_exclude_dirs": [
+    "bin",
+    "obj",
+    ".git",
+    "node_modules",
+    ".vs"
+  ],
+  "fallback_exclude_files": [],
+  "fallback_extensions": [
+    ".cs"
+  ],
+  "fallback_max_file_size_mb": 200,
+  "favorite_languages": [
+    {
+      "name": "C#",
+      "prefix": "//",
+      "signs": "=;:(){}[\\]<>?!."
+    },
+    {
+      "name": "C++",
+      "prefix": "//",
+      "signs": "=;:(){}[\\]<>?!."
+    },
+    {
+      "name": "Python",
+      "prefix": "#",
+      "signs": "=:(){}[\\]<>?!."
+    },
+    {
+      "name": "JavaScript",
+      "prefix": "//",
+      "signs": "=;:(){}[\\]<>?!."
+    }
+  ],
+  "max_file_size_sets": {
+    "Все читать": -1,
+    "До 10 МБ": 10,
+    "До 100 МБ": 100,
+    "До 200 МБ": 200
+  },
+  "output": {
+    "colored_output": true,
+    "results_file": "search_results.txt",
+    "show_first_n": 50
+  }
+}

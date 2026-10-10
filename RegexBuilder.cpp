@@ -1,6 +1,8 @@
 #include "RegexBuilder.h"
+#include "Settings.h"
 #include <regex>
 #include <sstream>
+#include <algorithm>
 
 namespace regex_builder {
 
@@ -19,7 +21,7 @@ namespace regex_builder {
         return result;
     }
 
-        std::string EscapeXyz(const std::string& s) {
+    std::string EscapeXyz(const std::string& s) {
         // Если чистая закрывающая скобка — искать в начале строки
         std::string trimmed = s;
         while (!trimmed.empty() && std::isspace((unsigned char)trimmed.front()))
@@ -61,6 +63,8 @@ namespace regex_builder {
         return escaped;
     }
 
+    // ============ ТИП 1 ============
+
     static std::string BuildWord(const SearchRequest& req) {
         std::string word = Escape(req.Word);
         if (req.WordWholeOnly)
@@ -68,8 +72,9 @@ namespace regex_builder {
         return word;
     }
 
+    // ============ ТИП 3 ============
+
     static std::string BuildEmpty(const std::string& x) {
-        // Проверка на "catch" без учёта регистра
         std::string lower = x;
         for (auto& c : lower) c = std::tolower((unsigned char)c);
         if (lower == "catch")
@@ -89,6 +94,8 @@ namespace regex_builder {
         return "";
     }
 
+    // ============ ТИП 4 ============
+
     static std::string BuildCombination(const SearchRequest& req) {
         switch (req.Combination) {
             case CombinationType::XButNotY:
@@ -100,7 +107,6 @@ namespace regex_builder {
                 std::string joined;
                 bool first = true;
                 while (std::getline(ss, item, ',')) {
-                    // обрезать пробелы
                     while (!item.empty() && std::isspace((unsigned char)item.front()))
                         item.erase(item.begin());
                     while (!item.empty() && std::isspace((unsigned char)item.back()))
@@ -115,6 +121,8 @@ namespace regex_builder {
         }
         return "";
     }
+
+    // ============ ТИП 5 ============
 
     static std::string BuildNumbers(const SearchRequest& req) {
         switch (req.NumberCompareValue) {
@@ -142,16 +150,50 @@ namespace regex_builder {
                 return BuildNumbers(req);
 
             case QuantityType::LineLength:
-                return "^{." + std::to_string(req.MinCount + 1) + ",}$";
+                switch (req.NumberCompareValue) {
+                    case NumberCompare::Greater:
+                        return "^.{" + std::to_string(req.MinCount + 1) + ",}$";
+                    case NumberCompare::Equal:
+                        return "^.{" + std::to_string(req.MinCount) + "}$";
+                    case NumberCompare::Less:
+                        return "^.{1," + std::to_string(std::max(1, req.MinCount - 1)) + "}$";
+                    case NumberCompare::Between:
+                        return "^.{" + std::to_string(req.MinCount) + "," +
+                            std::to_string(req.MaxCount) + "}$";
+                }
+                return "";
 
-            case QuantityType::ArgsLength: {
-                int commas = std::max(0, req.MinCount - 1);
-                return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
-                       std::to_string(commas) + ",}";
-            }
+            case QuantityType::ArgsLength:
+                switch (req.NumberCompareValue) {
+                    case NumberCompare::Greater: {
+                        int commas = std::max(0, req.MinCount);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(commas) + ",}";
+                    }
+                    case NumberCompare::Equal: {
+                        int commas = std::max(0, req.MinCount - 1);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(commas) + "}";
+                    }
+                    case NumberCompare::Less: {
+                        int commas = std::max(0, req.MinCount - 2);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){0,)" +
+                               std::to_string(commas) + "}";
+                    }
+                    case NumberCompare::Between: {
+                        int minC = std::max(0, req.MinCount - 1);
+                        int maxC = std::max(0, req.MaxCount - 1);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(minC) + "," +
+                               std::to_string(maxC) + "}";
+                    }
+                }
+                return "";
         }
         return "";
     }
+
+    // ============ ТИП 6 ============
 
     static std::string BuildTodo(const SearchRequest& req, const std::string& prefix) {
         if (!req.CommentWord.empty())
@@ -159,7 +201,11 @@ namespace regex_builder {
         return prefix + R"(\s*(TODO|FIXME|HACK).*)";
     }
 
-    static std::string BuildCommentedCode(const SearchRequest& req, const std::string& prefix) {
+    static std::string BuildCommentedCode(const SearchRequest& req,
+                                          const std::string& prefix) {
+        auto lang = settings::GetLanguage(req.Language);
+
+        // Режим со словами
         if (!req.CommentedCodeWords.empty()) {
             std::string lookaheads;
             for (const auto& w : req.CommentedCodeWords) {
@@ -167,13 +213,15 @@ namespace regex_builder {
             }
             return R"(^\s*)" + prefix + R"(\s*)" + lookaheads + ".*";
         }
-        std::string signs = patterns::CodeSigns(req.Language);
-        return R"(^\s*)" + prefix + R"(\s*.*)" + signs;
+
+        // Режим с признаками языка
+        return R"(^\s*)" + prefix + R"(\s*.*[)" + lang.Signs + R"(])";
     }
 
     static std::string BuildComment(const SearchRequest& req) {
-        std::string prefix = patterns::CommentPrefix(req.Language);
-        std::string firstChar = patterns::CommentPrefixFirstChar(req.Language);
+        auto lang = settings::GetLanguage(req.Language);
+        std::string prefix = lang.Prefix;
+        std::string firstChar = prefix.substr(0, 1);
 
         switch (req.Comment) {
             case CommentType::Todo:
@@ -187,12 +235,11 @@ namespace regex_builder {
 
             case CommentType::CommentedCode:
                 return BuildCommentedCode(req, prefix);
-
-            case CommentType::All:
-                return prefix + ".*";
         }
         return "";
     }
+
+    // ============ ГЛАВНЫЙ ============
 
     std::string Build(const SearchRequest& req) {
         switch (req.Type) {

@@ -417,6 +417,134 @@ namespace file_searcher {
         }
     }
 
+        // ============ ПОИСК ПО АРГУМЕНТАМ ============
+
+    static void SearchArgsLength(
+        const fs::path& file,
+        const regex_builder::SearchRequest& req,
+        std::vector<SearchResult>& results)
+    {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+
+        // Ищем все `(` в файле
+        for (size_t i = 0; i < content.size(); ++i) {
+            if (content[i] != '(') continue;
+
+            // Перед `(` — должно быть имя метода (буква)
+            if (i == 0) continue;
+            if (!std::isalnum((unsigned char)content[i - 1]) &&
+                content[i - 1] != '_') continue;
+
+            // Находим парную `)`
+            size_t closePos = std::string::npos;
+            int depth = 0;
+            bool inString = false;
+
+            for (size_t j = i; j < content.size(); ++j) {
+                char c = content[j];
+
+                if (inString) {
+                    if (c == '\\') { j++; continue; }
+                    if (c == '"') inString = false;
+                    continue;
+                }
+                if (c == '"') { inString = true; continue; }
+
+                if (c == '(') depth++;
+                else if (c == ')') {
+                    depth--;
+                    if (depth == 0) {
+                        closePos = j;
+                        break;
+                    }
+                }
+            }
+
+            if (closePos == std::string::npos) continue;
+
+            // Внутри — считаем запятые (только на верхнем уровне вложенности)
+            std::string inner = content.substr(i + 1, closePos - i - 1);
+
+            // Считаем аргументы: пустое → 0, иначе — запятых + 1
+            // Но нужно игнорировать запятые внутри вложенных скобок
+            int commas = 0;
+            bool hasArg = false;
+            int nested = 0;
+            bool inStr2 = false;
+
+            for (size_t k = 0; k < inner.size(); ++k) {
+                char c = inner[k];
+
+                if (inStr2) {
+                    if (c == '\\') { k++; continue; }
+                    if (c == '"') inStr2 = false;
+                    continue;
+                }
+                if (c == '"') { inStr2 = true; continue; }
+
+                if (c == '(') nested++;
+                else if (c == ')') nested--;
+                else if (c == ',' && nested == 0) {
+                    commas++;
+                    hasArg = true;
+                }
+                else if (!std::isspace((unsigned char)c)) {
+                    hasArg = true;
+                }
+            }
+
+            if (!hasArg) continue;  // Пустой () — пропускаем
+
+            int args = commas + 1;
+
+            // Проверка по режиму
+            bool ok = false;
+            switch (req.NumberCompareValue) {
+                case regex_builder::NumberCompare::Greater:
+                    ok = (args > req.MinCount);
+                    break;
+                case regex_builder::NumberCompare::Equal:
+                    ok = (args == req.MinCount);
+                    break;
+                case regex_builder::NumberCompare::Less:
+                    ok = (args < req.MinCount);
+                    break;
+                case regex_builder::NumberCompare::Between:
+                    ok = (args >= req.MinCount && args <= req.MaxCount);
+                    break;
+            }
+
+            if (!ok) continue;
+
+            // Номер строки
+            int line = 1;
+            for (size_t k = 0; k < i; ++k)
+                if (content[k] == '\n') line++;
+
+            // Текст — строка, где `(`
+            size_t lineStart = content.rfind('\n', i);
+            lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+            size_t lineEnd = content.find('\n', i);
+            if (lineEnd == std::string::npos) lineEnd = content.size();
+
+            std::string text = content.substr(lineStart, lineEnd - lineStart);
+            size_t s = text.find_first_not_of(" \t\r");
+            size_t e = text.find_last_not_of(" \t\r");
+            if (s != std::string::npos)
+                text = text.substr(s, e - s + 1);
+            else
+                text = "";
+
+            if (text.size() > 80) text = text.substr(0, 80) + "...";
+
+            results.push_back({file, line, text});
+
+            // Прыгаем за `)`
+            i = closePos;
+        }
+    }
+
     // ============ ГЛАВНЫЙ ПОИСК ============
 
     std::vector<SearchResult> Search(
@@ -440,11 +568,14 @@ namespace file_searcher {
 
         // Режим
         bool isBlock = (req.Type == regex_builder::SearchType::Structure &&
-                        req.Structure == regex_builder::StructureType::XAnywhereBeforeYBeforeZ);
+            req.Structure == regex_builder::StructureType::XAnywhereBeforeYBeforeZ);
 
         bool isMultiLineRegex = (req.Type == regex_builder::SearchType::Structure &&
-                                 req.Structure == regex_builder::StructureType::XEmpty);
+            req.Structure == regex_builder::StructureType::XEmpty);
 
+        bool isArgsLength = (req.Type == regex_builder::SearchType::Quantity &&
+            req.Quantity == regex_builder::QuantityType::ArgsLength);
+        
         std::mutex mtx;
         unsigned int numThreads = std::thread::hardware_concurrency();
         if (numThreads == 0) numThreads = 4;
@@ -461,6 +592,8 @@ namespace file_searcher {
                 try {
                     if (isBlock)
                         SearchBlock(files[i], req, options, local);
+                    else if (isArgsLength)
+                        SearchArgsLength(files[i], req, local);
                     else if (isMultiLineRegex)
                         SearchWholeFile(files[i], regex_obj, local);
                     else

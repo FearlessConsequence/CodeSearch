@@ -139,10 +139,12 @@ void PrintMenu(bool hasResults) {
     std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Переписать с учётом регистра\n";
     std::cout << "  " << colors::MenuNumber << "4." << colors::Reset << " Начать поиск\n";
     std::cout << "  " << colors::MenuNumber << "5." << colors::Reset << " Показать настройки\n";
+    std::cout << "  " << colors::MenuNumber << "6." << colors::Reset << " Параметры для другого языка\n";
+    std::cout << "  " << colors::MenuNumber << "9." << colors::Reset << " История поисков\n";
 
     if (hasResults) {
-        std::cout << "  " << colors::MenuNumber << "6." << colors::Reset << " Показать все в терминале\n";
-        std::cout << "  " << colors::MenuNumber << "7." << colors::Reset << " Выписать в файл\n";
+        std::cout << "  " << colors::MenuNumber << "7." << colors::Reset << " Показать все в терминале\n";
+        std::cout << "  " << colors::MenuNumber << "8." << colors::Reset << " Выписать в файл\n";
     }
 
     std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Выход\n";
@@ -157,9 +159,43 @@ int main() {
     SetConsoleCP(CP_UTF8);
 #endif
 
+    settings::Load("settings.json");
+    settings::LoadHistory();
+
     while (true) {
         auto req = prompt::Run();
         auto pattern = regex_builder::Build(req);
+
+        // --- Описание для истории ---
+        std::string desc;
+        switch (req.Type) {
+            case regex_builder::SearchType::Word:
+                desc = "Слово: " + req.Word;
+                break;
+            case regex_builder::SearchType::Format:
+                desc = "Формат";
+                break;
+            case regex_builder::SearchType::Structure:
+                desc = "Структура: X=" + req.X + ", Y=" + req.Y;
+                break;
+            case regex_builder::SearchType::Combination:
+                desc = "Комбинирование";
+                break;
+            case regex_builder::SearchType::Quantity:
+                desc = "Количество";
+                break;
+            case regex_builder::SearchType::Comment:
+                desc = "Комментарии";
+                break;
+        }
+
+        settings::HistoryEntry entry;
+        entry.Type = std::to_string((int)req.Type);
+        entry.Language = req.Language;
+        entry.Pattern = pattern;
+        entry.Description = desc;
+        settings::AddToHistory(entry);
+        settings::SaveHistory();
 
         std::cout << "\n";
         std::cout << "Ваше выражение:\n";
@@ -210,7 +246,7 @@ int main() {
             }
             else if (choice == "4") {
                 file_searcher::SearchOptions options;
-                if (!prompt::AskSearchOptions(options)) continue;
+                if (!prompt::AskSearchOptions(options, req)) continue;
 
                 std::cout << "\nПоиск...\n\n";
 
@@ -230,20 +266,41 @@ int main() {
                 std::cout << "\n";
             }
             else if (choice == "5") {
-                std::cout << "\n=== ТЕКУЩИЕ НАСТРОЙКИ ===\n\n";
-                std::cout << "Вывод:\n";
-                std::cout << "  Показывать первых: " << settings::ShowFirstN << "\n";
-                std::cout << "  Цветной: " << (settings::ColoredOutput ? "да" : "нет") << "\n";
-                std::cout << "  Файл результатов: " << settings::ResultsFile << "\n";
-                std::cout << "\nEnter — продолжить...";
-                std::cin.get();
+                prompt::EditSettings();
             }
-            else if (choice == "6" && hasLastResults) {
+            else if (choice == "6") {
+                if (settings::FavoriteLanguages.empty()) {
+                    std::cout << "\nНет доступных языков в settings.json.\n\n";
+                    continue;
+                }
+
+                std::cout << "\nВыберите язык:\n";
+                for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
+                    std::cout << "  " << (i + 1) << ". "
+                              << settings::FavoriteLanguages[i].Name << "\n";
+                }
+                std::cout << "> ";
+
+                int n = prompt::ReadInt(1, (int)settings::FavoriteLanguages.size());
+                req.Language = settings::FavoriteLanguages[n - 1].Name;
+
+                pattern = regex_builder::Build(req);
+
+                std::cout << "\n";
+                std::cout << "Ваше выражение:\n";
+                std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n";
+                std::cout << "\n";
+
+                if (CopyToClipboard(pattern))
+                    std::cout << "(скопировано в буфер)\n";
+                std::cout << "\n";
+            }
+            else if (choice == "7" && hasLastResults) {
                 std::cout << "\n";
                 ShowResults(lastResults, lastOptions, (int)lastResults.size());
                 std::cout << "\n";
             }
-            else if (choice == "7" && hasLastResults) {
+            else if (choice == "8" && hasLastResults) {
                 std::string outFile = settings::ResultsFile;
 
                 std::ofstream out(outFile);
@@ -259,6 +316,33 @@ int main() {
                     }
                     std::cout << "Сохранено: " << outFile << "\n\n";
                 }
+            }
+            else if (choice == "9") {
+                if (settings::History.empty()) {
+                    std::cout << "\nИстория пуста.\n\n";
+                    continue;
+                }
+
+                std::cout << "\n=== ИСТОРИЯ ===\n\n";
+                for (size_t i = 0; i < settings::History.size(); ++i) {
+                    std::cout << "  " << (i + 1) << ". " << settings::History[i].Description << "\n";
+                    std::cout << "     " << settings::History[i].Pattern << "\n\n";
+                }
+
+                std::cout << "Выбрать из истории? (0 — назад): ";
+                int k = prompt::ReadInt(0, (int)settings::History.size());
+                if (k == 0) continue;
+
+                auto& h = settings::History[k - 1];
+                pattern = h.Pattern;
+                req.Language = h.Language;
+
+                std::cout << "\nВаше выражение:\n";
+                std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+
+                if (CopyToClipboard(pattern))
+                    std::cout << "(скопировано в буфер)\n";
+                std::cout << "\n";
             }
         }
     }

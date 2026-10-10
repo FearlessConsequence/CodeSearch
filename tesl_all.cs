@@ -242,6 +242,7 @@ namespace TestProject
         {
             // внутренний комментарий
             int z = 5; // в конце
+            // int z = 5;
 
         }
 

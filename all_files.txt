@@ -1,5 +1,5 @@
-# Собрано 2026-10-05 13:24:59
-# Всего файлов: 2
+# Собрано 2026-10-08 17:13:50
+# Всего файлов: 6
 ======================================================================
 
 ======================================================================
@@ -257,6 +257,1486 @@ namespace TestProject
 }
 
 ======================================================================
+# ФАЙЛ: FileSearcher.cpp
+======================================================================
+
+#include "FileSearcher.h"
+#include "Colors.h"
+#include <regex>
+#include <fstream>
+#include <sstream>
+#include <thread>
+#include <mutex>
+#include <algorithm>
+#include <iostream>
+#include <atomic>
+
+namespace file_searcher {
+
+    // ============ УТИЛИТЫ ============
+
+    static std::string ToUtf8(const fs::path& p) {
+        return p.u8string();
+    }
+
+    static bool MatchesMask(const std::string& fileName, const std::string& mask) {
+        auto lower = [](std::string s) {
+            for (auto& c : s) c = std::tolower((unsigned char)c);
+            return s;
+        };
+        std::string fn = lower(fileName);
+        std::string m = lower(mask);
+
+        if (!m.empty() && m.front() == '*') {
+            std::string suffix = m.substr(1);
+            return fn.size() >= suffix.size() &&
+                   fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) == 0;
+        }
+        if (!m.empty() && m.back() == '*') {
+            std::string prefix = m.substr(0, m.size() - 1);
+            return fn.compare(0, prefix.size(), prefix) == 0;
+        }
+        return fn == m;
+    }
+
+    static bool InVector(const std::vector<std::string>& vec, const std::string& item) {
+        for (const auto& v : vec) {
+            if (v.size() == item.size()) {
+                bool eq = true;
+                for (size_t i = 0; i < v.size(); ++i) {
+                    if (std::tolower((unsigned char)v[i]) !=
+                        std::tolower((unsigned char)item[i])) {
+                        eq = false;
+                        break;
+                    }
+                }
+                if (eq) return true;
+            }
+        }
+        return false;
+    }
+
+    // ============ ОБХОД ФАЙЛОВ ============
+
+    static std::vector<fs::path> EnumerateFiles(const SearchOptions& opt) {
+        std::vector<fs::path> result;
+
+        try {
+            for (auto it = fs::recursive_directory_iterator(
+                     opt.Directory,
+                     fs::directory_options::skip_permission_denied);
+                 it != fs::recursive_directory_iterator(); ++it)
+            {
+                const auto& entry = *it;
+
+                if (entry.is_directory()) {
+                    std::string name = ToUtf8(entry.path().filename());
+                    if (InVector(opt.ExcludeDirs, name)) {
+                        it.disable_recursion_pending();
+                        continue;
+                    }
+                    continue;
+                }
+
+                if (!entry.is_regular_file()) continue;
+
+                std::string fileName = ToUtf8(entry.path().filename());
+
+                bool excluded = false;
+                for (const auto& mask : opt.ExcludeFiles) {
+                    if (MatchesMask(fileName, mask)) {
+                        excluded = true;
+                        break;
+                    }
+                }
+                if (excluded) continue;
+
+                if (!opt.Extensions.empty()) {
+                    std::string ext = ToUtf8(entry.path().extension());
+                    if (!InVector(opt.Extensions, ext)) continue;
+                }
+
+                try {
+                    auto sizeMb = fs::file_size(entry.path()) / 1024 / 1024;
+                    if (opt.MaxFileSizeMb > 0 && sizeMb > (uintmax_t)opt.MaxFileSizeMb)
+                        continue;
+                }
+                catch (...) { continue; }
+
+                result.push_back(entry.path());
+            }
+        }
+        catch (...) { }
+
+        return result;
+    }
+
+    // ============ ЧТЕНИЕ ФАЙЛА ============
+
+    static std::string ReadFile(const fs::path& file) {
+        std::ifstream in(file, std::ios::binary);
+        if (!in) return "";
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        return buffer.str();
+    }
+
+    // ============ ПОСТРОЧНЫЙ ПОИСК ============
+
+    static void SearchLineByLine(
+        const fs::path& file,
+        const std::regex& regex,
+        std::vector<SearchResult>& results)
+    {
+        std::ifstream in(file, std::ios::binary);
+        if (!in) return;
+
+        std::string line;
+        int lineNum = 0;
+
+        while (std::getline(in, line)) {
+            lineNum++;
+            if (std::regex_search(line, regex)) {
+                if (!line.empty() && line.back() == '\r') line.pop_back();
+                size_t start = line.find_first_not_of(" \t");
+                size_t end = line.find_last_not_of(" \t");
+                std::string trimmed = (start == std::string::npos)
+                    ? "" : line.substr(start, end - start + 1);
+
+                results.push_back({file, lineNum, trimmed});
+            }
+        }
+    }
+
+    // ============ ПОИСК ПО ВСЕМУ ФАЙЛУ (regex) ============
+
+    static void SearchWholeFile(
+        const fs::path& file,
+        const std::regex& regex,
+        std::vector<SearchResult>& results)
+    {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+
+        auto begin = std::sregex_iterator(content.begin(), content.end(), regex);
+        auto end = std::sregex_iterator();
+
+        for (auto it = begin; it != end; ++it) {
+            const auto& m = *it;
+            int line = 1;
+            for (size_t i = 0; i < (size_t)m.position(); ++i)
+                if (content[i] == '\n') line++;
+
+            std::string text = m.str();
+            size_t nl = text.find('\n');
+            if (nl != std::string::npos) text = text.substr(0, nl);
+            if (text.size() > 80) text = text.substr(0, 80) + "...";
+
+            results.push_back({file, line, text});
+        }
+    }
+
+    // ============ ПАРСЕР БЛОКОВ ============
+
+    // Разбор X по %, *, ^ — на части
+    static std::vector<std::string> SplitX(const std::string& x) {
+        std::vector<std::string> parts;
+        std::string current;
+        for (char c : x) {
+            if (c == '%' || c == '*' || c == '^') {
+                if (!current.empty()) parts.push_back(current);
+                current.clear();
+            } else {
+                current += c;
+            }
+        }
+        if (!current.empty()) parts.push_back(current);
+        return parts;
+    }
+
+    static bool CheckLeftBoundary(const std::string& content, size_t pos) {
+        if (pos == 0) return true;
+        char prev = content[pos - 1];
+        return !(std::isalnum((unsigned char)prev) || prev == '_');
+    }
+
+    static bool CheckRightBoundary(const std::string& content, size_t pos, size_t len) {
+        size_t end = pos + len;
+        if (end >= content.size()) return true;
+        char next = content[end];
+        return !(std::isalnum((unsigned char)next) || next == '_');
+    }
+
+    static bool NeedBoundaryCheck(const std::string& s) {
+        if (s.empty()) return false;
+        char c = s[0];
+        return std::isalnum((unsigned char)c) || c == '_';
+    }
+
+    // Найти X (с учётом % — пропуск пробелов и переносов)
+    static bool FindX(const std::string& content,
+                      const std::vector<std::string>& xParts,
+                      size_t startPos,
+                      size_t& foundPos)
+    {
+        size_t tempPos = startPos;
+        while (tempPos < content.size()) {
+            size_t p = content.find(xParts[0], tempPos);
+            if (p == std::string::npos) return false;
+
+            size_t cur = p + xParts[0].size();
+            bool ok = true;
+
+            for (size_t i = 1; i < xParts.size(); ++i) {
+                while (cur < content.size() &&
+                       (content[cur] == ' ' || content[cur] == '\t' ||
+                        content[cur] == '\n' || content[cur] == '\r'))
+                    cur++;
+
+                if (content.compare(cur, xParts[i].size(), xParts[i]) != 0) {
+                    ok = false;
+                    break;
+                }
+                cur += xParts[i].size();
+            }
+
+            if (ok) {
+                if (NeedBoundaryCheck(xParts[0]) && !CheckLeftBoundary(content, p)) {
+                    tempPos = p + 1;
+                    continue;
+                }
+                foundPos = p;
+                return true;
+            }
+
+            tempPos = p + 1;
+        }
+        return false;
+    }
+
+    // Парсер блока — считать скобки до баланса 0, игнорируя строки
+    static bool ParseBlock(const std::string& content,
+                           size_t openPos,
+                           char openCh,
+                           char closeCh,
+                           size_t& closePos)
+    {
+        int depth = 0;
+        bool inString = false;
+
+        for (size_t i = openPos; i < content.size(); ++i) {
+            char c = content[i];
+
+            if (inString) {
+                if (c == '\\') { i++; continue; }
+                if (c == '"') inString = false;
+                continue;
+            }
+
+            if (c == '"') { inString = true; continue; }
+
+            if (c == openCh) depth++;
+            else if (c == closeCh) {
+                depth--;
+                if (depth == 0) {
+                    closePos = i;
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    // ============ ПОИСК БЛОКА ============
+
+    static void SearchBlock(
+    const fs::path& file,
+    const regex_builder::SearchRequest& req,
+    const SearchOptions& options,
+    std::vector<SearchResult>& results)
+    {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+
+        auto xParts = SplitX(req.X);
+        if (xParts.empty()) return;
+
+        // Режим: X содержит { или (
+        bool hasBrace = req.X.find('{') != std::string::npos;
+        bool hasParen = req.X.find('(') != std::string::npos;
+        bool useParser = hasBrace || hasParen;
+
+        char openCh = hasBrace ? '{' : '(';
+        char closeCh = hasBrace ? '}' : ')';
+
+        size_t searchPos = 0;
+
+        while (searchPos < content.size()) {
+            size_t xPos;
+            if (!FindX(content, xParts, searchPos, xPos))
+                break;
+
+            size_t innerStart, innerEnd;
+
+            if (useParser) {
+                // Режим парсера — искать по всем строкам
+                size_t openPos = content.find(openCh, xPos);
+                if (openPos == std::string::npos) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                if (openPos - xPos > 200) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                size_t closePos;
+                if (!ParseBlock(content, openPos, openCh, closeCh, closePos)) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                if (req.Z.find(closeCh) == std::string::npos) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                innerStart = openPos;
+                innerEnd = closePos;
+            }
+            else {
+                // Режим одной строки
+                size_t lineEnd = content.find('\n', xPos);
+                if (lineEnd == std::string::npos) lineEnd = content.size();
+
+                size_t zPos = content.find(req.Z, xPos);
+                if (zPos == std::string::npos || zPos > lineEnd) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                // Проверка границы для Z
+                if (options.WordBoundaries && NeedBoundaryCheck(req.Z)
+                    && !CheckLeftBoundary(content, zPos)) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                std::string inner = content.substr(xPos, zPos - xPos);
+                if (inner.find(req.Y) == std::string::npos) {
+                    searchPos = xPos + 1;
+                    continue;
+                }
+
+                innerStart = xPos;
+                innerEnd = zPos + req.Z.size();
+            }
+
+            // Ищем ВСЕ Y внутри [innerStart, innerEnd]
+            size_t yPos = innerStart;
+            while (yPos < innerEnd) {
+                size_t found = content.find(req.Y, yPos);
+                if (found == std::string::npos || found >= innerEnd) break;
+
+                // Проверка границы для Y
+                if (options.WordBoundaries && NeedBoundaryCheck(req.Y)
+                    && !CheckLeftBoundary(content, found)) {
+                    yPos = found + 1;
+                    continue;
+                }
+
+                // Номер строки Y
+
+                // Номер строки Y
+                int line = 1;
+                for (size_t i = 0; i < found; ++i)
+                    if (content[i] == '\n') line++;
+
+                // Текст — строка Y
+                size_t lineStart = content.rfind('\n', found);
+                lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+                size_t lineEnd2 = content.find('\n', found);
+                if (lineEnd2 == std::string::npos) lineEnd2 = content.size();
+
+                std::string text = content.substr(lineStart, lineEnd2 - lineStart);
+
+                size_t s = text.find_first_not_of(" \t\r");
+                size_t e = text.find_last_not_of(" \t\r");
+                if (s != std::string::npos)
+                    text = text.substr(s, e - s + 1);
+                else
+                    text = "";
+
+                if (text.size() > 80) text = text.substr(0, 80) + "...";
+
+                results.push_back({file, line, text});
+
+                yPos = found + req.Y.size();
+            }
+
+            searchPos = xPos + 1;
+        }
+    }
+
+    // ============ ГЛАВНЫЙ ПОИСК ============
+
+    std::vector<SearchResult> Search(
+        const regex_builder::SearchRequest& req,
+        const std::string& pattern,
+        const SearchOptions& options)
+    {
+        std::vector<SearchResult> results;
+
+        auto files = EnumerateFiles(options);
+        std::cout << "Найдено файлов: " << files.size() << "\n\n";
+
+        std::regex regex_obj;
+        try {
+            regex_obj = std::regex(pattern);
+        }
+        catch (const std::regex_error& e) {
+            std::cerr << "Ошибка в regex: " << e.what() << "\n";
+            return results;
+        }
+
+        // Режим
+        bool isBlock = (req.Type == regex_builder::SearchType::Structure &&
+                        req.Structure == regex_builder::StructureType::XAnywhereBeforeYBeforeZ);
+
+        bool isMultiLineRegex = (req.Type == regex_builder::SearchType::Structure &&
+                                 req.Structure == regex_builder::StructureType::XEmpty);
+
+        std::mutex mtx;
+        unsigned int numThreads = std::thread::hardware_concurrency();
+        if (numThreads == 0) numThreads = 4;
+
+        std::vector<std::thread> threads;
+        std::atomic<size_t> index{0};
+
+        auto worker = [&]() {
+            std::vector<SearchResult> local;
+            while (true) {
+                size_t i = index.fetch_add(1);
+                if (i >= files.size()) break;
+
+                try {
+                    if (isBlock)
+                        SearchBlock(files[i], req, options, local);
+                    else if (isMultiLineRegex)
+                        SearchWholeFile(files[i], regex_obj, local);
+                    else
+                        SearchLineByLine(files[i], regex_obj, local);
+                }
+                catch (...) { }
+            }
+            std::lock_guard<std::mutex> lock(mtx);
+            results.insert(results.end(), local.begin(), local.end());
+        };
+
+        for (unsigned int t = 0; t < numThreads; ++t)
+            threads.emplace_back(worker);
+        for (auto& t : threads)
+            if (t.joinable()) t.join();
+
+        std::sort(results.begin(), results.end(),
+            [](const SearchResult& a, const SearchResult& b) {
+                auto sa = ToUtf8(a.File);
+                auto sb = ToUtf8(b.File);
+                if (sa != sb) return sa < sb;
+                return a.Line < b.Line;
+            });
+
+        return results;
+    }
+}
+
+======================================================================
+# ФАЙЛ: main.cpp
+======================================================================
+
+#include <iostream>
+#include <filesystem>
+#include <fstream>
+#include <algorithm>
+#include <iomanip>
+#include <sstream>
+
+#include "Colors.h"
+#include "Settings.h"
+#include "Prompt.h"
+#include "RegexBuilder.h"
+#include "FileSearcher.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
+namespace fs = std::filesystem;
+
+// ============ КОНВЕРТАЦИЯ PATH → UTF-8 ============
+
+static std::string ToUtf8(const fs::path& p) {
+#if __cplusplus >= 202002L
+    auto u8 = p.u8string();
+    return std::string(u8.begin(), u8.end());
+#else
+    return p.u8string();
+#endif
+}
+
+// ============ БУФЕР ОБМЕНА ============
+
+bool CopyToClipboard(const std::string& text) {
+#ifdef _WIN32
+    if (!OpenClipboard(nullptr)) return false;
+    EmptyClipboard();
+
+    int size = MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, nullptr, 0);
+    HGLOBAL hMem = GlobalAlloc(GMEM_MOVEABLE, size * sizeof(wchar_t));
+    if (!hMem) {
+        CloseClipboard();
+        return false;
+    }
+
+    wchar_t* mem = (wchar_t*)GlobalLock(hMem);
+    MultiByteToWideChar(CP_UTF8, 0, text.c_str(), -1, mem, size);
+    GlobalUnlock(hMem);
+
+    SetClipboardData(CF_UNICODETEXT, hMem);
+    CloseClipboard();
+    return true;
+#else
+    (void)text;
+    return false;
+#endif
+}
+
+// ============ ВЫВОД РЕЗУЛЬТАТОВ ============
+
+void ShowResults(
+    const std::vector<file_searcher::SearchResult>& results,
+    const file_searcher::SearchOptions& options,
+    int limit)
+{
+    if (results.empty()) return;
+
+    size_t shown = std::min((size_t)limit, results.size());
+
+    std::vector<std::string> paths;
+    size_t maxPathLen = 0;
+    size_t maxLineLen = 0;
+
+    for (size_t i = 0; i < shown; ++i) {
+        std::string rel;
+        try {
+            auto relPath = fs::relative(results[i].File, options.Directory);
+            rel = ToUtf8(relPath);
+        }
+        catch (...) {
+            rel = ToUtf8(results[i].File);
+        }
+        paths.push_back(rel);
+        maxPathLen = std::max(maxPathLen, rel.size());
+
+        std::string lineStr = std::to_string(results[i].Line);
+        maxLineLen = std::max(maxLineLen, lineStr.size());
+    }
+
+    for (size_t i = 0; i < shown; ++i) {
+        std::string pathPadded = paths[i];
+        pathPadded.append(maxPathLen - paths[i].size(), ' ');
+
+        std::string lineStr = std::to_string(results[i].Line);
+        std::string linePadded;
+        linePadded.append(maxLineLen - lineStr.size(), ' ');
+        linePadded += lineStr;
+
+        if (settings::ColoredOutput) {
+            std::cout << colors::File << pathPadded << colors::Reset
+                      << " : "
+                      << colors::LineNumber << linePadded << colors::Reset
+                      << " : "
+                      << colors::MatchText << results[i].Text << colors::Reset
+                      << "\n";
+        } else {
+            std::cout << pathPadded << " : " << linePadded
+                      << " : " << results[i].Text << "\n";
+        }
+    }
+}
+
+void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
+    std::vector<std::string> uniqueFiles;
+    for (const auto& r : results) {
+        std::string rel = ToUtf8(r.File);
+        if (std::find(uniqueFiles.begin(), uniqueFiles.end(), rel) == uniqueFiles.end())
+            uniqueFiles.push_back(rel);
+    }
+
+    int files = (int)uniqueFiles.size();
+    int count = (int)results.size();
+
+    std::cout << colors::Totals << "Найдено файлов: " << files << colors::Reset << "\n";
+
+    std::string color;
+    if (count < 100) color = colors::Totals;
+    else if (count < 500) color = colors::Warning;
+    else color = colors::Error;
+
+    std::cout << color << "Всего совпадений: " << count << colors::Reset << "\n";
+}
+
+// ============ МЕНЮ ============
+
+void PrintMenu(bool hasResults) {
+    std::cout << colors::MenuHeader << "Выберите действие:" << colors::Reset << "\n";
+    std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Изменить условия\n";
+    std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Скопировать в буфер\n";
+    std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Переписать с учётом регистра\n";
+    std::cout << "  " << colors::MenuNumber << "4." << colors::Reset << " Начать поиск\n";
+    std::cout << "  " << colors::MenuNumber << "5." << colors::Reset << " Показать настройки\n";
+    std::cout << "  " << colors::MenuNumber << "6." << colors::Reset << " Параметры для другого языка\n";
+
+    if (hasResults) {
+        std::cout << "  " << colors::MenuNumber << "7." << colors::Reset << " Показать все в терминале\n";
+        std::cout << "  " << colors::MenuNumber << "8." << colors::Reset << " Выписать в файл\n";
+    }
+
+    std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Выход\n";
+    std::cout << "> ";
+}
+
+// ============ ГЛАВНАЯ ============
+
+int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+#endif
+
+    settings::Load("settings.json");
+
+    while (true) {
+        auto req = prompt::Run();
+        auto pattern = regex_builder::Build(req);
+
+        std::cout << "\n";
+        std::cout << "Ваше выражение:\n";
+        std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n";
+        std::cout << "\n";
+
+        if (CopyToClipboard(pattern))
+            std::cout << "(скопировано в буфер)\n";
+        std::cout << "\n";
+
+        bool restart = false;
+        std::vector<file_searcher::SearchResult> lastResults;
+        file_searcher::SearchOptions lastOptions;
+        bool hasLastResults = false;
+
+        while (!restart) {
+            PrintMenu(hasLastResults);
+
+            std::string choice;
+            std::getline(std::cin, choice);
+            size_t s = choice.find_first_not_of(" \t\r\n");
+            size_t e = choice.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            choice = choice.substr(s, e - s + 1);
+
+            if (choice == "0") return 0;
+
+            if (choice == "1") {
+                restart = true;
+            }
+            else if (choice == "2") {
+                if (CopyToClipboard(pattern))
+                    std::cout << "(скопировано в буфер)\n";
+                else
+                    std::cout << "(буфер недоступен)\n";
+                std::cout << "\n";
+            }
+            else if (choice == "3") {
+                auto ignorePattern = "(?i)" + pattern;
+                std::cout << "\n";
+                std::cout << "Ваше выражение с учётом регистра:\n";
+                std::cout << "  " << colors::MatchText << ignorePattern << colors::Reset << "\n";
+                std::cout << "\n";
+
+                if (CopyToClipboard(ignorePattern))
+                    std::cout << "(скопировано в буфер)\n";
+                std::cout << "\n";
+            }
+            else if (choice == "4") {
+                file_searcher::SearchOptions options;
+                if (!prompt::AskSearchOptions(options)) continue;
+
+                std::cout << "\nПоиск...\n\n";
+
+                auto results = file_searcher::Search(req, pattern, options);
+
+                lastResults = results;
+                lastOptions = options;
+                hasLastResults = !results.empty();
+
+                ShowResults(results, options, options.ShowFirstN);
+
+                if ((int)results.size() > options.ShowFirstN)
+                    std::cout << "... и ещё " << (results.size() - options.ShowFirstN) << "\n";
+
+                std::cout << "\n";
+                PrintTotals(results);
+                std::cout << "\n";
+            }
+            else if (choice == "5") {
+                std::cout << "\n=== ТЕКУЩИЕ НАСТРОЙКИ ===\n\n";
+                std::cout << "Вывод:\n";
+                std::cout << "  Показывать первых: " << settings::ShowFirstN << "\n";
+                std::cout << "  Цветной: " << (settings::ColoredOutput ? "да" : "нет") << "\n";
+                std::cout << "  Файл результатов: " << settings::ResultsFile << "\n";
+                std::cout << "\nEnter — продолжить...";
+                std::cin.get();
+            }
+            else if (choice == "6") {
+                if (settings::FavoriteLanguages.empty()) {
+                    std::cout << "\nНет доступных языков в settings.json.\n\n";
+                    continue;
+                }
+
+                std::cout << "\nВыберите язык:\n";
+                for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
+                    std::cout << "  " << (i + 1) << ". "
+                              << settings::FavoriteLanguages[i].Name << "\n";
+                }
+                std::cout << "> ";
+
+                int n = prompt::ReadInt(1, (int)settings::FavoriteLanguages.size());
+                req.Language = settings::FavoriteLanguages[n - 1].Name;
+
+                pattern = regex_builder::Build(req);
+
+                std::cout << "\n";
+                std::cout << "Ваше выражение:\n";
+                std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n";
+                std::cout << "\n";
+
+                if (CopyToClipboard(pattern))
+                    std::cout << "(скопировано в буфер)\n";
+                std::cout << "\n";
+            }
+            else if (choice == "7" && hasLastResults) {
+                std::cout << "\n";
+                ShowResults(lastResults, lastOptions, (int)lastResults.size());
+                std::cout << "\n";
+            }
+            else if (choice == "8" && hasLastResults) {
+                std::string outFile = settings::ResultsFile;
+
+                std::ofstream out(outFile);
+                if (out) {
+                    for (const auto& r : lastResults) {
+                        std::string rel;
+                        try {
+                            rel = ToUtf8(fs::relative(r.File, lastOptions.Directory));
+                        } catch (...) {
+                            rel = ToUtf8(r.File);
+                        }
+                        out << rel << ":" << r.Line << ": " << r.Text << "\n";
+                    }
+                    std::cout << "Сохранено: " << outFile << "\n\n";
+                }
+            }
+        }
+    }
+
+    return 0;
+}
+
+======================================================================
+# ФАЙЛ: Prompt.cpp
+======================================================================
+
+#include "Prompt.h"
+#include "Colors.h"
+#include "Settings.h"
+#include <iostream>
+#include <sstream>
+#include <algorithm>
+#include <filesystem>
+
+namespace fs = std::filesystem;
+
+namespace prompt {
+
+    int ReadInt(int minVal, int maxVal) {
+        while (true) {
+            std::string input;
+            std::getline(std::cin, input);
+
+            size_t start = input.find_first_not_of(" \t\r\n");
+            size_t end = input.find_last_not_of(" \t\r\n");
+            if (start == std::string::npos) {
+                std::cout << "Введите число от " << minVal << " до " << maxVal << ": ";
+                continue;
+            }
+            input = input.substr(start, end - start + 1);
+
+            try {
+                int value = std::stoi(input);
+                if (value >= minVal && value <= maxVal)
+                    return value;
+            }
+            catch (...) {}
+
+            std::cout << "Введите число от " << minVal << " до " << maxVal << ": ";
+        }
+    }
+
+    static std::string ReadLine(const std::string& promptText) {
+        std::cout << promptText;
+        std::string input;
+        std::getline(std::cin, input);
+
+        size_t start = input.find_first_not_of(" \t\r\n");
+        size_t end = input.find_last_not_of(" \t\r\n");
+        if (start == std::string::npos) return "";
+        return input.substr(start, end - start + 1);
+    }
+
+    static std::string FormatSet(const std::vector<std::string>& items) {
+        if (items.empty()) return "[нет]";
+        std::string result;
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i > 0) result += ", ";
+            result += items[i];
+        }
+        return result;
+    }
+
+    static std::string FormatSize(int mb) {
+        if (mb < 0) return "[нет лимита]";
+        return std::to_string(mb) + " МБ";
+    }
+
+    // ============ ТИП 1 ============
+
+    static void AskWord(regex_builder::SearchRequest& req) {
+        req.Word = ReadLine("Введите слово: ");
+        auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да): ");
+        std::transform(w.begin(), w.end(), w.begin(), ::tolower);
+        req.WordWholeOnly = (w != "n");
+    }
+
+    // ============ ТИП 2 ============
+
+    static void AskFormat(regex_builder::SearchRequest& req) {
+        std::cout << "Что искать?\n";
+        std::cout << "  1. Email\n";
+        std::cout << "  2. URL\n";
+        std::cout << "  3. IP-адрес\n";
+        std::cout << "  4. GUID\n";
+        std::cout << "  5. Дата (2024-05-12)\n";
+        std::cout << "> ";
+        req.Format = (patterns::FormatType)ReadInt(1, 5);
+    }
+
+    // ============ ТИП 3 ============
+
+    static void AskStructure(regex_builder::SearchRequest& req) {
+        std::cout << "Что искать?\n";
+        std::cout << "  1. X, внутри которого пусто\n";
+        std::cout << "  2. X, потом что угодно, потом Y, потом что угодно, потом Z\n";
+        std::cout << "> ";
+        req.Structure = (regex_builder::StructureType)ReadInt(1, 2);
+
+        if (req.Structure == regex_builder::StructureType::XEmpty) {
+            req.X = ReadLine("Что должно быть пустым (catch, метод, блок): ");
+        }
+        else {
+            while (true) {
+                std::cout << colors::Dim
+                          << "(% — любые пробелы, * — любые символы)"
+                          << colors::Reset << "\n";
+
+                req.X = ReadLine("X: ");
+                req.Y = ReadLine("Y: ");
+                req.Z = ReadLine("Z: ");
+
+                bool ok = true;
+
+                if (req.X.empty()) {
+                    std::cout << colors::Error
+                              << "X не может быть пустым."
+                              << colors::Reset << "\n\n";
+                    ok = false;
+                }
+                if (req.Y.empty()) {
+                    std::cout << colors::Error
+                              << "Y не может быть пустым."
+                              << colors::Reset << "\n\n";
+                    ok = false;
+                }
+                if (req.Z.empty()) {
+                    std::cout << colors::Error
+                              << "Z не может быть пустым."
+                              << colors::Reset << "\n\n";
+                    ok = false;
+                }
+
+                if (ok) break;
+
+                std::cout << "Попробуйте снова:\n";
+            }
+        }
+    }
+
+    // ============ ТИП 4 ============
+
+    static void AskCombination(regex_builder::SearchRequest& req) {
+        std::cout << "Что искать?\n";
+        std::cout << "  1. X, но не Y\n";
+        std::cout << "  2. X или Y или Z\n";
+        std::cout << "> ";
+        req.Combination = (regex_builder::CombinationType)ReadInt(1, 2);
+
+        if (req.Combination == regex_builder::CombinationType::XOrY) {
+            req.X = ReadLine("Варианты через запятую: ");
+        }
+        else {
+            req.X = ReadLine("X: ");
+            req.Y = ReadLine("Y (исключить): ");
+            req.Exclude = req.Y;
+        }
+    }
+
+    // ============ ТИП 5 ============
+
+    static void AskQuantity(regex_builder::SearchRequest& req) {
+        std::cout << "Что ограничить?\n";
+        std::cout << "  1. Числа\n";
+        std::cout << "  2. Длина строки (от скольки символов)\n";
+        std::cout << "  3. Длина списка аргументов\n";
+        std::cout << "> ";
+        req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
+
+        if (req.Quantity == regex_builder::QuantityType::Numbers) {
+            std::cout << "Как сравнивать количество цифр?\n";
+            std::cout << "  1. Больше N\n";
+            std::cout << "  2. Равно N\n";
+            std::cout << "  3. Меньше N\n";
+            std::cout << "  4. В диапазоне от A до B\n";
+            std::cout << "> ";
+            req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
+
+            if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
+                std::cout << "Минимум цифр: ";
+                req.MinCount = ReadInt(1, 10000);
+                std::cout << "Максимум цифр: ";
+                req.MaxCount = ReadInt(req.MinCount, 10000);
+            }
+            else {
+                std::cout << "Количество цифр: ";
+                req.MinCount = ReadInt(1, 10000);
+            }
+        }
+        else if (req.Quantity == regex_builder::QuantityType::LineLength) {
+            std::cout << "Как сравнивать длину?\n";
+            std::cout << "  1. Больше N\n";
+            std::cout << "  2. Равно N\n";
+            std::cout << "  3. Меньше N\n";
+            std::cout << "  4. В диапазоне от A до B\n";
+            std::cout << "> ";
+            req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
+
+            if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
+                std::cout << "Минимум символов: ";
+                req.MinCount = ReadInt(1, 10000);
+                std::cout << "Максимум символов: ";
+                req.MaxCount = ReadInt(req.MinCount, 10000);
+            }
+            else {
+                std::cout << "Количество символов: ";
+                req.MinCount = ReadInt(1, 10000);
+            }
+        }
+
+        else if (req.Quantity == regex_builder::QuantityType::ArgsLength) {
+            std::cout << "Как сравнивать количество аргументов?\n";
+            std::cout << "  1. Больше N\n";
+            std::cout << "  2. Равно N\n";
+            std::cout << "  3. Меньше N\n";
+            std::cout << "  4. В диапазоне от A до B\n";
+            std::cout << "> ";
+            req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
+
+            if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
+                std::cout << "Минимум аргументов: ";
+                req.MinCount = ReadInt(1, 10000);
+                std::cout << "Максимум аргументов: ";
+                req.MaxCount = ReadInt(req.MinCount, 10000);
+            }
+            else {
+                std::cout << "Количество аргументов: ";
+                req.MinCount = ReadInt(1, 10000);
+            }
+        }
+    }
+
+    // ============ ТИП 6 ============
+
+        static void AskComment(regex_builder::SearchRequest& req) {
+        req.Language = settings::DefaultLanguage;
+
+        std::cout << "Что искать?\n";
+        std::cout << "  1. TODO / FIXME / HACK\n";
+        std::cout << "  2. Комментарий в начале строки\n";
+        std::cout << "  3. Комментарий в конце строки\n";
+        std::cout << "  4. Закомментированный код\n";
+        std::cout << "> ";
+        req.Comment = (regex_builder::CommentType)ReadInt(1, 4);
+
+        if (req.Comment == regex_builder::CommentType::Todo) {
+            req.CommentWord = ReadLine("Слово (Enter — TODO/FIXME/HACK): ");
+        }
+        // 4-й — без вопроса, признаки по языку
+    }
+
+    // ============ ГЛАВНЫЙ МЕТОД ============
+
+    regex_builder::SearchRequest Run() {
+        regex_builder::SearchRequest req;
+
+        std::cout << "=== Генератор регулярных выражений ===\n\n";
+
+        std::cout << "Что искать?\n";
+        std::cout << "  1. Слово с границами (name, но не username)\n";
+        std::cout << "  2. Формат (email, URL, IP, GUID, дата)\n";
+        std::cout << "  3. Структура\n";
+        std::cout << "  4. Комбинирование (но не, или)\n";
+        std::cout << "  5. Количество (длина, число цифр)\n";
+        std::cout << "  6. Комментарии (TODO, закомментированный код)\n";
+        std::cout << "> ";
+
+        req.Type = (regex_builder::SearchType)ReadInt(1, 6);
+        std::cout << "\n";
+
+        switch (req.Type) {
+            case regex_builder::SearchType::Word:        AskWord(req); break;
+            case regex_builder::SearchType::Format:      AskFormat(req); break;
+            case regex_builder::SearchType::Structure:   AskStructure(req); break;
+            case regex_builder::SearchType::Combination: AskCombination(req); break;
+            case regex_builder::SearchType::Quantity:    AskQuantity(req); break;
+            case regex_builder::SearchType::Comment:     AskComment(req); break;
+        }
+
+        return req;
+    }
+
+    // ============ ПАРАМЕТРЫ ПОИСКА ============
+
+    static std::vector<std::string> GetDefaultExtensions() {
+        if (!settings::DefaultExtensionSet.empty()) {
+            auto it = settings::ExtensionSets.find(settings::DefaultExtensionSet);
+            if (it != settings::ExtensionSets.end())
+                return it->second;
+        }
+        return settings::FallbackExtensions;
+    }
+
+    static std::vector<std::string> GetDefaultExcludeDirs() {
+        if (!settings::DefaultExcludeDirSet.empty()) {
+            auto it = settings::ExcludeDirSets.find(settings::DefaultExcludeDirSet);
+            if (it != settings::ExcludeDirSets.end())
+                return it->second;
+        }
+        return settings::FallbackExcludeDirs;
+    }
+
+    static std::vector<std::string> GetDefaultExcludeFiles() {
+        if (!settings::DefaultExcludeFileSet.empty()) {
+            auto it = settings::ExcludeFileSets.find(settings::DefaultExcludeFileSet);
+            if (it != settings::ExcludeFileSets.end())
+                return it->second;
+        }
+        return settings::FallbackExcludeFiles;
+    }
+
+    static int GetDefaultMaxFileSize() {
+        if (!settings::DefaultMaxFileSizeSet.empty()) {
+            auto it = settings::MaxFileSizeSets.find(settings::DefaultMaxFileSizeSet);
+            if (it != settings::MaxFileSizeSets.end())
+                return it->second;
+        }
+        return settings::FallbackMaxFileSizeMb;
+    }
+
+    bool AskSearchOptions(file_searcher::SearchOptions& opt) {
+        opt.Directory = fs::current_path();
+        opt.Extensions = GetDefaultExtensions();
+        opt.ExcludeDirs = GetDefaultExcludeDirs();
+        opt.ExcludeFiles = GetDefaultExcludeFiles();
+        opt.MaxFileSizeMb = GetDefaultMaxFileSize();
+        opt.ShowFirstN = settings::ShowFirstN;
+
+        while (true) {
+            auto currentDir = fs::current_path();
+            std::string dirLabel;
+            if (opt.Directory == currentDir) {
+                dirLabel = "[текущая]";
+            } else {
+                auto u8 = opt.Directory.u8string();
+                dirLabel = std::string(u8.begin(), u8.end());
+            }
+
+            std::cout << "\n";
+            std::cout << "Измените параметры поиска:\n";
+            std::cout << "  1. Начать поиск\n";
+            std::cout << "  2. Директория: " << dirLabel << "\n";
+            std::cout << "  3. Расширения: " << FormatSet(opt.Extensions) << "\n";
+            std::cout << "  4. Исключённые папки: " << FormatSet(opt.ExcludeDirs) << "\n";
+            std::cout << "  5. Исключённые файлы: " << FormatSet(opt.ExcludeFiles) << "\n";
+            std::cout << "  6. Максимальный размер: " << FormatSize(opt.MaxFileSizeMb) << "\n";
+            std::cout << "  7. Границы слов: " << (opt.WordBoundaries ? "да" : "нет") << "\n";
+            std::cout << "  0. Отмена\n";
+            std::cout << "> ";
+
+            std::string choice;
+            std::getline(std::cin, choice);
+            size_t s = choice.find_first_not_of(" \t\r\n");
+            size_t e = choice.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            choice = choice.substr(s, e - s + 1);
+
+            if (choice == "0") return false;
+            if (choice == "1") return true;
+
+            if (choice == "2") {
+                auto dir = ReadLine("Директория (Enter — текущая): ");
+                if (!dir.empty()) {
+                    fs::path dirPath = fs::u8path(dir);
+                    if (fs::exists(dirPath))
+                        opt.Directory = dirPath;
+                }
+            }
+            else if (choice == "3") {
+                if (!settings::ExtensionSets.empty()) {
+                    std::cout << "\nВыберите сет расширений:\n";
+                    int i = 1;
+                    std::vector<std::string> keys;
+                    for (const auto& kv : settings::ExtensionSets) {
+                        std::cout << "  " << i++ << ". " << kv.first
+                                  << " — " << FormatSet(kv.second) << "\n";
+                        keys.push_back(kv.first);
+                    }
+                    std::cout << "  0. Отмена\n> ";
+                    int n = ReadInt(0, (int)keys.size());
+                    if (n > 0) opt.Extensions = settings::ExtensionSets[keys[n - 1]];
+                }
+            }
+            else if (choice == "4") {
+                if (!settings::ExcludeDirSets.empty()) {
+                    std::cout << "\nВыберите сет папок:\n";
+                    int i = 1;
+                    std::vector<std::string> keys;
+                    for (const auto& kv : settings::ExcludeDirSets) {
+                        std::cout << "  " << i++ << ". " << kv.first
+                                  << " — " << FormatSet(kv.second) << "\n";
+                        keys.push_back(kv.first);
+                    }
+                    std::cout << "  0. Отмена\n> ";
+                    int n = ReadInt(0, (int)keys.size());
+                    if (n > 0) opt.ExcludeDirs = settings::ExcludeDirSets[keys[n - 1]];
+                }
+            }
+            else if (choice == "5") {
+                if (!settings::ExcludeFileSets.empty()) {
+                    std::cout << "\nВыберите сет файлов:\n";
+                    int i = 1;
+                    std::vector<std::string> keys;
+                    for (const auto& kv : settings::ExcludeFileSets) {
+                        std::cout << "  " << i++ << ". " << kv.first
+                                  << " — " << FormatSet(kv.second) << "\n";
+                        keys.push_back(kv.first);
+                    }
+                    std::cout << "  0. Отмена\n> ";
+                    int n = ReadInt(0, (int)keys.size());
+                    if (n > 0) opt.ExcludeFiles = settings::ExcludeFileSets[keys[n - 1]];
+                }
+            }
+            else if (choice == "6") {
+                std::cout << "Максимум МБ (-1 — без лимита): ";
+                int mb = ReadInt(-1, 10000);
+                opt.MaxFileSizeMb = mb;
+            }
+            else if (choice == "7") {
+                opt.WordBoundaries = !opt.WordBoundaries;
+            }
+        }
+    }
+}
+
+======================================================================
+# ФАЙЛ: RegexBuilder.cpp
+======================================================================
+
+#include "RegexBuilder.h"
+#include "Settings.h"
+#include <regex>
+#include <sstream>
+#include <algorithm>
+
+namespace regex_builder {
+
+    const std::string PERCENT_PLACEHOLDER = "\x01PERCENT\x01";
+    const std::string STAR_PLACEHOLDER = "\x01STAR\x01";
+
+    std::string Escape(const std::string& s) {
+        static const std::string special = R"(\.^$|()[]{}*+?)";
+        std::string result;
+        for (char c : s) {
+            if (special.find(c) != std::string::npos) {
+                result += '\\';
+            }
+            result += c;
+        }
+        return result;
+    }
+
+    std::string EscapeXyz(const std::string& s) {
+        // Если чистая закрывающая скобка — искать в начале строки
+        std::string trimmed = s;
+        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.front()))
+            trimmed.erase(trimmed.begin());
+        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.back()))
+            trimmed.pop_back();
+
+        if (trimmed == "}") {
+            return R"(^\s*\})";
+        }
+
+        // Заменить % / * / ^ на плейсхолдеры
+        std::string temp = s;
+        size_t pos;
+        while ((pos = temp.find('%')) != std::string::npos)
+            temp.replace(pos, 1, PERCENT_PLACEHOLDER);
+        while ((pos = temp.find('*')) != std::string::npos)
+            temp.replace(pos, 1, STAR_PLACEHOLDER);
+        while ((pos = temp.find('^')) != std::string::npos)
+            temp.replace(pos, 1, STAR_PLACEHOLDER);
+
+        // Экранировать
+        std::string escaped = Escape(temp);
+
+        // Вернуть плейсхолдеры
+        while ((pos = escaped.find(PERCENT_PLACEHOLDER)) != std::string::npos)
+            escaped.replace(pos, PERCENT_PLACEHOLDER.length(), R"(\s*)");
+        while ((pos = escaped.find(STAR_PLACEHOLDER)) != std::string::npos)
+            escaped.replace(pos, STAR_PLACEHOLDER.length(), R"([\s\S]*?)");
+
+        return escaped;
+    }
+
+    std::string WrapWord(const std::string& s) {
+        std::string escaped = Escape(s);
+        if (!s.empty() && std::isalpha((unsigned char)s[0])) {
+            return R"(\b)" + escaped + R"(\b)";
+        }
+        return escaped;
+    }
+
+    // ============ ТИП 1 ============
+
+    static std::string BuildWord(const SearchRequest& req) {
+        std::string word = Escape(req.Word);
+        if (req.WordWholeOnly)
+            return R"(\b)" + word + R"(\b)";
+        return word;
+    }
+
+    // ============ ТИП 3 ============
+
+    static std::string BuildEmpty(const std::string& x) {
+        std::string lower = x;
+        for (auto& c : lower) c = std::tolower((unsigned char)c);
+        if (lower == "catch")
+            return R"(catch\s*(\([^)]*\))?\s*\{\s*\})";
+        return EscapeXyz(x) + R"(\s*\{\s*\})";
+    }
+
+    static std::string BuildStructure(const SearchRequest& req) {
+        switch (req.Structure) {
+            case StructureType::XEmpty:
+                return BuildEmpty(req.X);
+            case StructureType::XAnywhereBeforeYBeforeZ:
+                return EscapeXyz(req.X) + "[\\s\\S]*?" +
+                       EscapeXyz(req.Y) + "[\\s\\S]*?" +
+                       EscapeXyz(req.Z);
+        }
+        return "";
+    }
+
+    // ============ ТИП 4 ============
+
+    static std::string BuildCombination(const SearchRequest& req) {
+        switch (req.Combination) {
+            case CombinationType::XButNotY:
+                return "(?!.*" + Escape(req.Exclude) + ").*" + Escape(req.X);
+
+            case CombinationType::XOrY: {
+                std::stringstream ss(req.X);
+                std::string item;
+                std::string joined;
+                bool first = true;
+                while (std::getline(ss, item, ',')) {
+                    while (!item.empty() && std::isspace((unsigned char)item.front()))
+                        item.erase(item.begin());
+                    while (!item.empty() && std::isspace((unsigned char)item.back()))
+                        item.pop_back();
+                    if (item.empty()) continue;
+                    if (!first) joined += "|";
+                    joined += WrapWord(item);
+                    first = false;
+                }
+                return R"(\b()" + joined + R"()\w*)";
+            }
+        }
+        return "";
+    }
+
+    // ============ ТИП 5 ============
+
+    static std::string BuildNumbers(const SearchRequest& req) {
+        switch (req.NumberCompareValue) {
+            case NumberCompare::Equal:
+                return R"(\b\d{)" + std::to_string(req.MinCount) + R"(}\b)";
+
+            case NumberCompare::Greater:
+                return R"(\b\d{)" + std::to_string(req.MinCount + 1) + R"(,}\b)";
+
+            case NumberCompare::Less: {
+                int maxN = std::max(1, req.MinCount - 1);
+                return R"(\b\d{1,)" + std::to_string(maxN) + R"(}\b)";
+            }
+
+            case NumberCompare::Between:
+                return R"(\b\d{)" + std::to_string(req.MinCount) + "," +
+                       std::to_string(req.MaxCount) + R"(}\b)";
+        }
+        return "";
+    }
+
+    static std::string BuildQuantity(const SearchRequest& req) {
+        switch (req.Quantity) {
+            case QuantityType::Numbers:
+                return BuildNumbers(req);
+
+            case QuantityType::LineLength:
+                switch (req.NumberCompareValue) {
+                    case NumberCompare::Greater:
+                        return "^.{" + std::to_string(req.MinCount + 1) + ",}$";
+                    case NumberCompare::Equal:
+                        return "^.{" + std::to_string(req.MinCount) + "}$";
+                    case NumberCompare::Less:
+                        return "^.{1," + std::to_string(std::max(1, req.MinCount - 1)) + "}$";
+                    case NumberCompare::Between:
+                        return "^.{" + std::to_string(req.MinCount) + "," +
+                            std::to_string(req.MaxCount) + "}$";
+                }
+                return "";
+
+            case QuantityType::ArgsLength:
+                switch (req.NumberCompareValue) {
+                    case NumberCompare::Greater: {
+                        int commas = std::max(0, req.MinCount);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(commas) + ",}";
+                    }
+                    case NumberCompare::Equal: {
+                        int commas = std::max(0, req.MinCount - 1);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(commas) + "}";
+                    }
+                    case NumberCompare::Less: {
+                        int commas = std::max(0, req.MinCount - 2);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){0,)" +
+                               std::to_string(commas) + "}";
+                    }
+                    case NumberCompare::Between: {
+                        int minC = std::max(0, req.MinCount - 1);
+                        int maxC = std::max(0, req.MaxCount - 1);
+                        return R"(\w+\s+\w+\s+\w+\s*\([^)]*\w+\s+\w+(\s*,\s*\w+\s+\w+){)" +
+                               std::to_string(minC) + "," +
+                               std::to_string(maxC) + "}";
+                    }
+                }
+                return "";
+        }
+        return "";
+    }
+
+    // ============ ТИП 6 ============
+
+    static std::string BuildTodo(const SearchRequest& req, const std::string& prefix) {
+        if (!req.CommentWord.empty())
+            return prefix + R"(\s*)" + Escape(req.CommentWord) + ".*";
+        return prefix + R"(\s*(TODO|FIXME|HACK).*)";
+    }
+
+    static std::string BuildCommentedCode(const SearchRequest& req,
+                                          const std::string& prefix) {
+        auto lang = settings::GetLanguage(req.Language);
+
+        // Режим со словами
+        if (!req.CommentedCodeWords.empty()) {
+            std::string lookaheads;
+            for (const auto& w : req.CommentedCodeWords) {
+                lookaheads += "(?=.*" + WrapWord(w) + ")";
+            }
+            return R"(^\s*)" + prefix + R"(\s*)" + lookaheads + ".*";
+        }
+
+        // Режим с признаками языка
+        return R"(^\s*)" + prefix + R"(\s*.*)" + lang.Signs;
+    }
+
+    static std::string BuildComment(const SearchRequest& req) {
+        auto lang = settings::GetLanguage(req.Language);
+        std::string prefix = lang.Prefix;
+        std::string firstChar = prefix.substr(0, 1);
+
+        switch (req.Comment) {
+            case CommentType::Todo:
+                return BuildTodo(req, prefix);
+
+            case CommentType::StartLine:
+                return R"(^\s*)" + prefix + ".*";
+
+            case CommentType::EndLine:
+                return R"(^\s*[^)" + firstChar + R"(\s].*)" + prefix + ".*";
+
+            case CommentType::CommentedCode:
+                return BuildCommentedCode(req, prefix);
+        }
+        return "";
+    }
+
+    // ============ ГЛАВНЫЙ ============
+
+    std::string Build(const SearchRequest& req) {
+        switch (req.Type) {
+            case SearchType::Word:        return BuildWord(req);
+            case SearchType::Format:      return patterns::ForFormat(req.Format);
+            case SearchType::Structure:   return BuildStructure(req);
+            case SearchType::Combination: return BuildCombination(req);
+            case SearchType::Quantity:    return BuildQuantity(req);
+            case SearchType::Comment:     return BuildComment(req);
+        }
+        return "";
+    }
+}
+
+======================================================================
 # ФАЙЛ: tesl_all.cs
 ======================================================================
 
@@ -504,6 +1984,7 @@ namespace TestProject
         {
             // внутренний комментарий
             int z = 5; // в конце
+            // int z = 5;
 
         }
 
