@@ -1,4 +1,6 @@
 #include "Prompt.h"
+#include "Utf8.h"
+#include <cctype>
 #include "Colors.h"
 #include "Settings.h"
 #include <iostream>
@@ -10,9 +12,13 @@ namespace fs = std::filesystem;
 
 namespace prompt {
 
-    // ============ ВСПОМОГАТЕЛЬНОЕ ============
+    bool GoBack = false;
+    bool WantHistory = false;
+    bool WantFavorites = false;
+    bool WantClipboardHistory = false;
 
     int ReadInt(int minVal, int maxVal) {
+        GoBack = false;
         while (true) {
             std::string input;
             std::getline(std::cin, input);
@@ -20,10 +26,15 @@ namespace prompt {
             size_t start = input.find_first_not_of(" \t\r\n");
             size_t end = input.find_last_not_of(" \t\r\n");
             if (start == std::string::npos) {
-                std::cout << "Введите число от " << minVal << " до " << maxVal << ": ";
+                std::cout << "> ";
                 continue;
             }
             input = input.substr(start, end - start + 1);
+
+            if (input == "0" && minVal > 0) {
+                GoBack = true;
+                return minVal;
+            }
 
             try {
                 int value = std::stoi(input);
@@ -32,19 +43,26 @@ namespace prompt {
             }
             catch (...) {}
 
-            std::cout << "Введите число от " << minVal << " до " << maxVal << ": ";
+            std::cout << "> ";
         }
     }
 
-    static std::string ReadLine(const std::string& promptText) {
+    std::string ReadLine(const std::string& promptText) {
         std::cout << promptText;
+        GoBack = false; 
         std::string input;
         std::getline(std::cin, input);
 
         size_t start = input.find_first_not_of(" \t\r\n");
         size_t end = input.find_last_not_of(" \t\r\n");
         if (start == std::string::npos) return "";
-        return input.substr(start, end - start + 1);
+        std::string trimmed = input.substr(start, end - start + 1);
+
+        if (trimmed == "0") {
+            GoBack = true;
+            return "";
+        }
+        return trimmed;
     }
 
     static std::string FormatSet(const std::vector<std::string>& items) {
@@ -70,172 +88,199 @@ namespace prompt {
         return result;
     }
 
+    static bool QuotesBalanced(const std::string& s) {
+        bool inQuote = false;
+        char q = 0;
+        for (char c : s) {
+            if (inQuote) { if (c == q) inQuote = false; }
+            else if (c == '"' || c == '\'') { inQuote = true; q = c; }
+        }
+        return !inQuote;
+    }
+
     // ============ ТИП 1 ============
 
-    static void AskWord(regex_builder::SearchRequest& req) {
-        req.Word = ReadLine("Введите слово: ");
-        auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да): ");
-        std::transform(w.begin(), w.end(), w.begin(), ::tolower);
-        req.WordWholeOnly = (w != "n");
+    static bool AskWord(regex_builder::SearchRequest& req) {
+        while (true) {
+            req.Word = ReadLine("Введите слово (0 — назад): ");
+            if (GoBack) return false;
+            if (!req.Word.empty()) break;
+            std::cout << colors::Error << "Слово не может быть пустым." << colors::Reset << "\n";
+        }
+
+        auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да, 0 — назад): ");
+        if (GoBack) return false;
+
+        req.WordWholeOnly = !(w == "n" || w == "no" || w == "нет");
+        return true;
     }
 
     // ============ ТИП 2 ============
 
-    static void AskFormat(regex_builder::SearchRequest& req) {
+    static bool AskFormat(regex_builder::SearchRequest& req) {
         std::cout << "Что искать?\n";
         std::cout << "  1. Email\n";
         std::cout << "  2. URL\n";
         std::cout << "  3. IP-адрес\n";
         std::cout << "  4. GUID\n";
         std::cout << "  5. Дата (2024-05-12)\n";
-        std::cout << "> ";
+        std::cout << "  0. Назад\n> ";
         req.Format = (patterns::FormatType)ReadInt(1, 5);
+        return !GoBack;
     }
 
     // ============ ТИП 3 ============
 
-    static void AskStructure(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать?\n";
-        std::cout << "  1. X, внутри которого пусто\n";
-        std::cout << "  2. X, потом что угодно, потом Y, потом что угодно, потом Z\n";
-        std::cout << "> ";
-        req.Structure = (regex_builder::StructureType)ReadInt(1, 2);
+    static bool AskStructure(regex_builder::SearchRequest& req) {
+        while (true) {
+            std::cout << "Что искать?\n";
+            std::cout << "  1. X, внутри которого пусто\n";
+            std::cout << "  2. X, потом что угодно, потом Y, потом что угодно, потом Z\n";
+            std::cout << "  0. Назад\n> ";
+            req.Structure = (regex_builder::StructureType)ReadInt(1, 2);
+            if (GoBack) return false;
 
-        if (req.Structure == regex_builder::StructureType::XEmpty) {
-            req.X = ReadLine("Что должно быть пустым (catch, метод, блок): ");
-        }
-        else {
-            while (true) {
-                std::cout << colors::Dim
-                          << "(% — любые пробелы, * — любые символы)"
-                          << colors::Reset << "\n";
+            if (req.Structure == regex_builder::StructureType::XEmpty) {
+                while (true) {
+                    req.X = ReadLine("Что должно быть пустым (0 — назад): ");
+                    if (GoBack) break;
+                    if (!req.X.empty()) return true;
 
-                req.X = ReadLine("X: ");
-                req.Y = ReadLine("Y: ");
-                req.Z = ReadLine("Z: ");
-
-                bool ok = true;
-
-                if (req.X.empty()) {
-                    std::cout << colors::Error
-                              << "X не может быть пустым."
-                              << colors::Reset << "\n\n";
-                    ok = false;
+                    std::cout << colors::Error << "Не может быть пустым."
+                              << colors::Reset << "\n";
                 }
-                if (req.Y.empty()) {
-                    std::cout << colors::Error
-                              << "Y не может быть пустым."
-                              << colors::Reset << "\n\n";
-                    ok = false;
-                }
-                if (req.Z.empty()) {
-                    std::cout << colors::Error
-                              << "Z не может быть пустым."
-                              << colors::Reset << "\n\n";
-                    ok = false;
-                }
+                if (GoBack) continue;
+                return true;
+            }
+            else {
+                while (true) {
+                    std::cout << colors::Dim
+                        << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
+                        << " ^ — начало строки, $ — конец строки)"
+                        << colors::Reset << "\n";
 
-                if (ok) break;
+                    req.X = ReadLine("X (0 — назад): ");
+                    if (GoBack) break;
+                    req.Y = ReadLine("Y (0 — назад): ");
+                    if (GoBack) break;
+                    req.Z = ReadLine("Z (0 — назад): ");
+                    if (GoBack) break;
 
-                std::cout << "Попробуйте снова:\n";
+                    bool ok = true;
+                    if (req.X.empty()) {
+                        std::cout << colors::Error << "X пуст." << colors::Reset << "\n";
+                        ok = false;
+                    }
+                    if (req.Y.empty()) {
+                        std::cout << colors::Error << "Y пуст." << colors::Reset << "\n";
+                        ok = false;
+                    }
+                    if (req.Z.empty()) {
+                        std::cout << colors::Error << "Z пуст." << colors::Reset << "\n";
+                        ok = false;
+                    }
+                    if (ok) return true;
+                }
+                if (GoBack) continue;
             }
         }
     }
 
     // ============ ТИП 4 ============
 
-    static void AskCombination(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать?\n";
-        std::cout << "  1. X, но не Y\n";
-        std::cout << "  2. X или Y или Z\n";
-        std::cout << "> ";
-        req.Combination = (regex_builder::CombinationType)ReadInt(1, 2);
+    static bool AskCombination(regex_builder::SearchRequest& req) {
+        while (true) {
+            std::cout << "Что искать?\n";
+            std::cout << "  1. X, но не Y\n";
+            std::cout << "  2. X или Y или Z\n";
+            std::cout << "  0. Назад\n> ";
+            req.Combination = (regex_builder::CombinationType)ReadInt(1, 2);
+            if (GoBack) return false;
 
-        if (req.Combination == regex_builder::CombinationType::XOrY) {
-            req.X = ReadLine("Варианты через запятую: ");
-        }
-        else {
-            req.X = ReadLine("X: ");
-            req.Y = ReadLine("Y (исключить): ");
-            req.Exclude = req.Y;
+            if (req.Combination == regex_builder::CombinationType::XOrY) {
+                while (true) {
+                    std::cout << colors::Dim
+                              << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
+                              << " ^ — начало строки, $ — конец строки.\n"
+                              << " Если элемент содержит запятую — возьмите его в кавычки \"...\" или '...')"
+                              << colors::Reset << "\n";
+                    req.X = ReadLine("Элементы через запятую (0 — назад): ");
+                    if (GoBack) continue;
+                    if (!QuotesBalanced(req.X)) {
+                        std::cout << colors::Error << "Кавычки не закрыты. Попробуйте снова." << colors::Reset << "\n";
+                        continue;
+                    }
+                    bool hasItem = false;
+                    for (char c : req.X) {
+                        if (!std::isspace((unsigned char)c) && c != ',') { hasItem = true; break; }
+                    }
+                    if (!hasItem) {
+                        std::cout << colors::Error << "Нужен хотя бы один элемент." << colors::Reset << "\n";
+                        continue;
+                    }
+                    return true;
+                }
+            }
+            else {
+                while (true) {
+                    std::cout << colors::Dim
+                              << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
+                              << " ^ — начало строки, $ — конец строки)"
+                              << colors::Reset << "\n";
+                    req.X = ReadLine("X (0 — назад): ");
+                    if (GoBack) continue;
+                    req.Y = ReadLine("Y (0 — назад): ");
+                    if (GoBack) continue;
+                    if (req.X.empty()) { std::cout << colors::Error << "X пуст." << colors::Reset << "\n"; continue; }
+                    if (req.Y.empty()) { std::cout << colors::Error << "Y пуст." << colors::Reset << "\n"; continue; }
+                    req.Exclude = req.Y;
+                    return true;
+                }
+            }
         }
     }
 
     // ============ ТИП 5 ============
 
-    static void AskQuantity(regex_builder::SearchRequest& req) {
-        std::cout << "Что ограничить?\n";
-        std::cout << "  1. Числа\n";
-        std::cout << "  2. Длина строки (от скольки символов)\n";
-        std::cout << "  3. Длина списка аргументов\n";
-        std::cout << "> ";
-        req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
+    static bool AskQuantity(regex_builder::SearchRequest& req) {
+        while (true) {
+            std::cout << "Что ограничить?\n";
+            std::cout << "  1. Числа\n";
+            std::cout << "  2. Длина строки\n";
+            std::cout << "  3. Длина списка аргументов\n";
+            std::cout << "  0. Назад\n> ";
+            req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
+            if (GoBack) return false;
 
-        if (req.Quantity == regex_builder::QuantityType::Numbers) {
-            std::cout << "Как сравнивать количество цифр?\n";
+            std::cout << "Как сравнивать?\n";
             std::cout << "  1. Больше N\n";
             std::cout << "  2. Равно N\n";
             std::cout << "  3. Меньше N\n";
-            std::cout << "  4. В диапазоне от A до B\n";
-            std::cout << "> ";
+            std::cout << "  4. В диапазоне\n";
+            std::cout << "  0. Назад\n> ";
             req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
+            if (GoBack) continue;
 
             if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
-                std::cout << "Минимум цифр: ";
+                std::cout << "Минимум (0 — назад): ";
                 req.MinCount = ReadInt(1, 10000);
-                std::cout << "Максимум цифр: ";
+                if (GoBack) continue;
+                std::cout << "Максимум (0 — назад): ";
                 req.MaxCount = ReadInt(req.MinCount, 10000);
+                if (GoBack) continue;
             }
             else {
-                std::cout << "Количество цифр: ";
+                std::cout << "Количество (0 — назад): ";
                 req.MinCount = ReadInt(1, 10000);
+                if (GoBack) continue;
             }
-        }
-        else if (req.Quantity == regex_builder::QuantityType::LineLength) {
-            std::cout << "Как сравнивать длину?\n";
-            std::cout << "  1. Больше N\n";
-            std::cout << "  2. Равно N\n";
-            std::cout << "  3. Меньше N\n";
-            std::cout << "  4. В диапазоне от A до B\n";
-            std::cout << "> ";
-            req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
-
-            if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
-                std::cout << "Минимум символов: ";
-                req.MinCount = ReadInt(1, 10000);
-                std::cout << "Максимум символов: ";
-                req.MaxCount = ReadInt(req.MinCount, 10000);
-            }
-            else {
-                std::cout << "Количество символов: ";
-                req.MinCount = ReadInt(1, 10000);
-            }
-        }
-        else if (req.Quantity == regex_builder::QuantityType::ArgsLength) {
-            std::cout << "Как сравнивать количество аргументов?\n";
-            std::cout << "  1. Больше N\n";
-            std::cout << "  2. Равно N\n";
-            std::cout << "  3. Меньше N\n";
-            std::cout << "  4. В диапазоне от A до B\n";
-            std::cout << "> ";
-            req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
-
-            if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
-                std::cout << "Минимум аргументов: ";
-                req.MinCount = ReadInt(1, 10000);
-                std::cout << "Максимум аргументов: ";
-                req.MaxCount = ReadInt(req.MinCount, 10000);
-            }
-            else {
-                std::cout << "Количество аргументов: ";
-                req.MinCount = ReadInt(1, 10000);
-            }
+            return true;
         }
     }
 
     // ============ ТИП 6 ============
 
-    static void AskComment(regex_builder::SearchRequest& req) {
+    static bool AskComment(regex_builder::SearchRequest& req) {
         req.Language = settings::DefaultLanguage;
 
         std::cout << "Что искать?\n";
@@ -243,46 +288,104 @@ namespace prompt {
         std::cout << "  2. Комментарий в начале строки\n";
         std::cout << "  3. Комментарий в конце строки\n";
         std::cout << "  4. Закомментированный код\n";
-        std::cout << "> ";
+        std::cout << "  0. Назад\n> ";
         req.Comment = (regex_builder::CommentType)ReadInt(1, 4);
+        if (GoBack) return false;
 
         if (req.Comment == regex_builder::CommentType::Todo) {
-            req.CommentWord = ReadLine("Слово (Enter — TODO/FIXME/HACK): ");
+            req.CommentWord = ReadLine("Слово (Enter — TODO/FIXME/HACK, 0 — назад): ");
+            if (GoBack) return false;
         }
+        return true;
     }
 
     // ============ ГЛАВНЫЙ МЕТОД ============
 
     regex_builder::SearchRequest Run() {
         regex_builder::SearchRequest req;
+        GoBack = false;
+        std::cout << "=== Умный поиск и генератор regex ===\n\n";
 
-        std::cout << "=== Генератор регулярных выражений ===\n\n";
+        bool printMenu = true;
+        while (true) {
+            if (printMenu) {
+                std::cout << "Что искать?\n";
+                std::cout << "  1. Структура\n";
+                std::cout << "  2. Комбинирование\n";
+                std::cout << "  3. Количество\n";
+                std::cout << "  4. Формат (email, URL, IP, GUID, дата)\n";
+                std::cout << "  5. Комментарии\n";
+                std::cout << "  6. Слово с границами\n";
+                std::cout << "  7. Избранное\n";
+                std::cout << "  8. История поисков\n";
+                std::cout << "  9. История буфера\n";
+                std::cout << "  0. Настройки\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-        std::cout << "Что искать?\n";
-        std::cout << "  1. Слово с границами (name, но не username)\n";
-        std::cout << "  2. Формат (email, URL, IP, GUID, дата)\n";
-        std::cout << "  3. Структура\n";
-        std::cout << "  4. Комбинирование (но не, или)\n";
-        std::cout << "  5. Количество (длина, число цифр)\n";
-        std::cout << "  6. Комментарии (TODO, закомментированный код)\n";
-        std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-        req.Type = (regex_builder::SearchType)ReadInt(1, 6);
-        std::cout << "\n";
+            int choice = -1;
+            try { choice = std::stoi(input); } catch (...) { continue; }
 
-        switch (req.Type) {
-            case regex_builder::SearchType::Word:        AskWord(req); break;
-            case regex_builder::SearchType::Format:      AskFormat(req); break;
-            case regex_builder::SearchType::Structure:   AskStructure(req); break;
-            case regex_builder::SearchType::Combination: AskCombination(req); break;
-            case regex_builder::SearchType::Quantity:    AskQuantity(req); break;
-            case regex_builder::SearchType::Comment:     AskComment(req); break;
+            if (choice == 0) {
+                EditSettings();
+                std::cout << "\n";
+                printMenu = true;
+                continue;
+            }
+            if (choice == 8) {
+                WantHistory = true;
+                return req;
+            }
+            if (choice == 7) {
+                WantFavorites = true;
+                return req;
+            }
+            if (choice == 9) {
+                WantClipboardHistory = true;
+                return req;
+            }
+            if (choice < 1 || choice > 6) continue;
+
+            printMenu = true;
+
+            switch (choice) {
+                case 1: req.Type = regex_builder::SearchType::Structure;   break;
+                case 2: req.Type = regex_builder::SearchType::Combination; break;
+                case 3: req.Type = regex_builder::SearchType::Quantity;    break;
+                case 4: req.Type = regex_builder::SearchType::Format;      break;
+                case 5: req.Type = regex_builder::SearchType::Comment;     break;
+                case 6: req.Type = regex_builder::SearchType::Word;        break;
+            }
+            std::cout << "\n";
+
+            bool ok = false;
+            switch (req.Type) {
+                case regex_builder::SearchType::Word:        ok = AskWord(req); break;
+                case regex_builder::SearchType::Format:      ok = AskFormat(req); break;
+                case regex_builder::SearchType::Structure:   ok = AskStructure(req); break;
+                case regex_builder::SearchType::Combination: ok = AskCombination(req); break;
+                case regex_builder::SearchType::Quantity:    ok = AskQuantity(req); break;
+                case regex_builder::SearchType::Comment:     ok = AskComment(req); break;
+            }
+
+            if (ok) return req;
+
+            GoBack = false;
+            std::cout << "\n";
+            printMenu = true;
         }
-
-        return req;
     }
 
-    // ============ ПАРАМЕТРЫ ПОИСКА ============
+    // ============ НАСТРОЙКИ ============
 
     static std::vector<std::string> GetDefaultExtensions() {
         if (!settings::DefaultExtensionSet.empty()) {
@@ -333,38 +436,58 @@ namespace prompt {
     }
 
     static void EditExtensionSets() {
+        ShowExtensionSets();
+        bool printMenu = true;
         while (true) {
-            ShowExtensionSets();
+            if (printMenu) {
+                std::cout << "Что сделать?\n";
+                std::cout << "  1. Добавить сет\n";
+                std::cout << "  2. Изменить сет\n";
+                std::cout << "  3. Удалить сет\n";
+                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            std::cout << "Что сделать?\n";
-            std::cout << "  1. Добавить сет\n";
-            std::cout << "  2. Изменить сет\n";
-            std::cout << "  3. Удалить сет\n";
-            std::cout << "  4. Сменить сет по умолчанию\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-            int n = ReadInt(0, 4);
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 4) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             std::vector<std::string> keys;
-            for (const auto& kv : settings::ExtensionSets)
-                keys.push_back(kv.first);
+            for (const auto& kv : settings::ExtensionSets) keys.push_back(kv.first);
 
             if (n == 1) {
-                std::string name = ReadLine("Имя нового сета: ");
+                std::string name = ReadLine("Имя нового сета (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
-                auto raw = ReadLine("Расширения через запятую: ");
+                auto raw = ReadLine("Расширения через запятую (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExtensionSets[name] = SplitByComma(raw);
+                std::cout << "\nДобавлено.\n\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Какой сет изменить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
                 auto oldVals = settings::ExtensionSets[oldName];
 
-                auto newName = ReadLine("Имя сета (Enter — оставить): ");
-                auto raw = ReadLine("Расширения через запятую (Enter — оставить): ");
+                auto newName = ReadLine("Имя сета (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto raw = ReadLine("Расширения (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
 
                 auto newVals = SplitByComma(raw);
                 if (newVals.empty()) newVals = oldVals;
@@ -377,16 +500,21 @@ namespace prompt {
                 } else {
                     settings::ExtensionSets[oldName] = newVals;
                 }
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Какой сет удалить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExtensionSets.erase(keys[k - 1]);
+                std::cout << "\nУдалено.\n\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Какой по умолчанию: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExtensionSet = keys[k - 1];
+                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -404,38 +532,58 @@ namespace prompt {
     }
 
     static void EditExcludeDirSets() {
+        ShowExcludeDirSets();
+        bool printMenu = true;
         while (true) {
-            ShowExcludeDirSets();
+            if (printMenu) {
+                std::cout << "Что сделать?\n";
+                std::cout << "  1. Добавить сет\n";
+                std::cout << "  2. Изменить сет\n";
+                std::cout << "  3. Удалить сет\n";
+                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            std::cout << "Что сделать?\n";
-            std::cout << "  1. Добавить сет\n";
-            std::cout << "  2. Изменить сет\n";
-            std::cout << "  3. Удалить сет\n";
-            std::cout << "  4. Сменить сет по умолчанию\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-            int n = ReadInt(0, 4);
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 4) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             std::vector<std::string> keys;
-            for (const auto& kv : settings::ExcludeDirSets)
-                keys.push_back(kv.first);
+            for (const auto& kv : settings::ExcludeDirSets) keys.push_back(kv.first);
 
             if (n == 1) {
-                std::string name = ReadLine("Имя нового сета: ");
+                std::string name = ReadLine("Имя нового сета (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
-                auto raw = ReadLine("Папки через запятую: ");
+                auto raw = ReadLine("Папки через запятую (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeDirSets[name] = SplitByComma(raw);
+                std::cout << "\nДобавлено.\n\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Какой сет изменить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
                 auto oldVals = settings::ExcludeDirSets[oldName];
 
-                auto newName = ReadLine("Имя сета (Enter — оставить): ");
-                auto raw = ReadLine("Папки через запятую (Enter — оставить): ");
+                auto newName = ReadLine("Имя сета (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto raw = ReadLine("Папки (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
 
                 auto newVals = SplitByComma(raw);
                 if (newVals.empty()) newVals = oldVals;
@@ -448,16 +596,21 @@ namespace prompt {
                 } else {
                     settings::ExcludeDirSets[oldName] = newVals;
                 }
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Какой сет удалить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeDirSets.erase(keys[k - 1]);
+                std::cout << "\nУдалено.\n\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Какой по умолчанию: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExcludeDirSet = keys[k - 1];
+                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -475,38 +628,58 @@ namespace prompt {
     }
 
     static void EditExcludeFileSets() {
+        ShowExcludeFileSets();
+        bool printMenu = true;
         while (true) {
-            ShowExcludeFileSets();
+            if (printMenu) {
+                std::cout << "Что сделать?\n";
+                std::cout << "  1. Добавить сет\n";
+                std::cout << "  2. Изменить сет\n";
+                std::cout << "  3. Удалить сет\n";
+                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            std::cout << "Что сделать?\n";
-            std::cout << "  1. Добавить сет\n";
-            std::cout << "  2. Изменить сет\n";
-            std::cout << "  3. Удалить сет\n";
-            std::cout << "  4. Сменить сет по умолчанию\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-            int n = ReadInt(0, 4);
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 4) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             std::vector<std::string> keys;
-            for (const auto& kv : settings::ExcludeFileSets)
-                keys.push_back(kv.first);
+            for (const auto& kv : settings::ExcludeFileSets) keys.push_back(kv.first);
 
             if (n == 1) {
-                std::string name = ReadLine("Имя нового сета: ");
+                std::string name = ReadLine("Имя нового сета (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
-                auto raw = ReadLine("Файлы через запятую: ");
+                auto raw = ReadLine("Файлы через запятую (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeFileSets[name] = SplitByComma(raw);
+                std::cout << "\nДобавлено.\n\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Какой сет изменить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
                 auto oldVals = settings::ExcludeFileSets[oldName];
 
-                auto newName = ReadLine("Имя сета (Enter — оставить): ");
-                auto raw = ReadLine("Файлы через запятую (Enter — оставить): ");
+                auto newName = ReadLine("Имя сета (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto raw = ReadLine("Файлы (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
 
                 auto newVals = SplitByComma(raw);
                 if (newVals.empty()) newVals = oldVals;
@@ -519,16 +692,21 @@ namespace prompt {
                 } else {
                     settings::ExcludeFileSets[oldName] = newVals;
                 }
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Какой сет удалить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeFileSets.erase(keys[k - 1]);
+                std::cout << "\nУдалено.\n\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Какой по умолчанию: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExcludeFileSet = keys[k - 1];
+                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -546,38 +724,59 @@ namespace prompt {
     }
 
     static void EditMaxFileSizeSets() {
+        ShowMaxFileSizeSets();
+        bool printMenu = true;
         while (true) {
-            ShowMaxFileSizeSets();
+            if (printMenu) {
+                std::cout << "Что сделать?\n";
+                std::cout << "  1. Добавить сет\n";
+                std::cout << "  2. Изменить сет\n";
+                std::cout << "  3. Удалить сет\n";
+                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            std::cout << "Что сделать?\n";
-            std::cout << "  1. Добавить сет\n";
-            std::cout << "  2. Изменить сет\n";
-            std::cout << "  3. Удалить сет\n";
-            std::cout << "  4. Сменить сет по умолчанию\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-            int n = ReadInt(0, 4);
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 4) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             std::vector<std::string> keys;
-            for (const auto& kv : settings::MaxFileSizeSets)
-                keys.push_back(kv.first);
+            for (const auto& kv : settings::MaxFileSizeSets) keys.push_back(kv.first);
 
             if (n == 1) {
-                std::string name = ReadLine("Имя нового сета: ");
+                std::string name = ReadLine("Имя нового сета (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
-                std::cout << "Размер в МБ (-1 — без лимита): ";
-                settings::MaxFileSizeSets[name] = ReadInt(-1, 100000);
+                std::cout << "Размер в МБ (-1 — без лимита, 0 — 0 МБ): ";
+                if (GoBack) { GoBack = false; continue; }
+                int val = ReadInt(-1, 100000);
+                settings::MaxFileSizeSets[name] = val;
+                std::cout << "\nДобавлено.\n\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Какой сет изменить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
                 int oldVal = settings::MaxFileSizeSets[oldName];
 
-                auto newName = ReadLine("Имя сета (Enter — оставить): ");
-                auto raw = ReadLine("Размер в МБ (Enter — оставить): ");
+                auto newName = ReadLine("Имя сета (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto raw = ReadLine("Размер в МБ (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
 
                 int newVal = oldVal;
                 if (!raw.empty()) {
@@ -592,16 +791,21 @@ namespace prompt {
                 } else {
                     settings::MaxFileSizeSets[oldName] = newVal;
                 }
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Какой сет удалить: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::MaxFileSizeSets.erase(keys[k - 1]);
+                std::cout << "\nУдалено.\n\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Какой по умолчанию: ";
+                std::cout << "Введите номер сета: ";
                 int k = ReadInt(1, (int)keys.size());
+                if (GoBack) { GoBack = false; continue; }
                 settings::DefaultMaxFileSizeSet = keys[k - 1];
+                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -609,27 +813,49 @@ namespace prompt {
     // ============ 5. ВЫВОД ============
 
     static void EditOutputSettings() {
+        bool printMenu = true;
         while (true) {
-            std::cout << "\n=== ВЫВОД ===\n\n";
-            std::cout << "  1. Показывать первых: " << settings::ShowFirstN << "\n";
-            std::cout << "  2. Цветной: " << (settings::ColoredOutput ? "да" : "нет") << "\n";
-            std::cout << "  3. Файл результатов: " << settings::ResultsFile << "\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            if (printMenu) {
+                std::cout << "\n=== ВЫВОД ===\n\n";
+                std::cout << "  1. Показывать первых: " << settings::ShowFirstN << "\n";
+                std::cout << "  2. Цветной: " << (settings::ColoredOutput ? "да" : "нет") << "\n";
+                std::cout << "  3. Файл результатов: " << settings::ResultsFile << "\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            int n = ReadInt(0, 3);
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
+
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 3) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             if (n == 1) {
-                std::cout << "Сколько: ";
-                settings::ShowFirstN = ReadInt(1, 100000);
+                std::cout << "Сколько (0 — назад): ";
+                int v = ReadInt(1, 100000);
+                if (GoBack) { GoBack = false; continue; }
+                settings::ShowFirstN = v;
+                std::cout << "\nУстановлено.\n\n";
             }
             else if (n == 2) {
                 settings::ColoredOutput = !settings::ColoredOutput;
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3) {
-                std::cout << "Имя файла: ";
-                settings::ResultsFile = ReadLine("");
+                auto v = ReadLine("Имя файла (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                settings::ResultsFile = v;
+                std::cout << "\nУстановлено.\n\n";
             }
         }
     }
@@ -648,39 +874,62 @@ namespace prompt {
     }
 
     static void EditLanguages() {
+        ShowLanguages();
+        bool printMenu = true;
         while (true) {
-            ShowLanguages();
+            if (printMenu) {
+                std::cout << "Что сделать?\n";
+                std::cout << "  1. Добавить язык\n";
+                std::cout << "  2. Изменить язык\n";
+                std::cout << "  3. Удалить язык\n";
+                std::cout << "  4. Сменить язык по умолчанию\n";
+                std::cout << "  0. Назад\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            std::cout << "Что сделать?\n";
-            std::cout << "  1. Добавить язык\n";
-            std::cout << "  2. Изменить язык\n";
-            std::cout << "  3. Удалить язык\n";
-            std::cout << "  4. Сменить язык по умолчанию\n";
-            std::cout << "  0. Назад\n";
-            std::cout << "> ";
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
 
-            int n = ReadInt(0, 4);
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 4) continue;
+
             if (n == 0) return;
+            printMenu = true;
 
             int sz = (int)settings::FavoriteLanguages.size();
 
             if (n == 1) {
                 settings::LanguageInfo info;
-                info.Name = ReadLine("Имя языка: ");
+                info.Name = ReadLine("Имя языка (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 if (info.Name.empty()) continue;
-                info.Prefix = ReadLine("Префикс комментария: ");
-                info.Signs = ReadLine("Признаки кода: ");
+                info.Prefix = ReadLine("Префикс (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                info.Signs = ReadLine("Признаки (0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
                 settings::FavoriteLanguages.push_back(info);
+                std::cout << "\nДобавлено.\n\n";
             }
             else if (n == 2 && sz > 0) {
-                std::cout << "Какой язык изменить: ";
+                std::cout << "Введите номер языка: ";
                 int k = ReadInt(1, sz);
+                if (GoBack) { GoBack = false; continue; }
                 auto& lang = settings::FavoriteLanguages[k - 1];
                 std::string oldName = lang.Name;
 
-                auto name = ReadLine("Имя (Enter — оставить): ");
-                auto prefix = ReadLine("Префикс (Enter — оставить): ");
-                auto signs = ReadLine("Признаки (Enter — оставить): ");
+                auto name = ReadLine("Имя (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto prefix = ReadLine("Префикс (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
+                auto signs = ReadLine("Признаки (Enter — оставить, 0 — назад): ");
+                if (GoBack) { GoBack = false; continue; }
 
                 if (!name.empty()) lang.Name = name;
                 if (!prefix.empty()) lang.Prefix = prefix;
@@ -688,17 +937,23 @@ namespace prompt {
 
                 if (settings::DefaultLanguage == oldName && !name.empty())
                     settings::DefaultLanguage = name;
+                std::cout << "\nИзменено.\n\n";
             }
             else if (n == 3 && sz > 0) {
-                std::cout << "Какой язык удалить: ";
+                std::cout << "Введите номер языка: ";
                 int k = ReadInt(1, sz);
+                if (GoBack) { GoBack = false; continue; }
                 settings::FavoriteLanguages.erase(
                     settings::FavoriteLanguages.begin() + (k - 1));
+                std::cout << "\nУдалено.\n\n";
             }
             else if (n == 4 && sz > 0) {
-                std::cout << "Какой по умолчанию: ";
+                std::cout << "Введите номер языка: ";
                 int k = ReadInt(1, sz);
+                if (GoBack) { GoBack = false; continue; }
                 settings::DefaultLanguage = settings::FavoriteLanguages[k - 1].Name;
+                std::cout << "\nПо умолчанию: "
+                          << settings::DefaultLanguage << "\n\n";
             }
         }
     }
@@ -706,18 +961,32 @@ namespace prompt {
     // ============ ГЛАВНОЕ МЕНЮ НАСТРОЕК ============
 
     void EditSettings() {
+        bool printMenu = true;
         while (true) {
-            std::cout << "\n=== НАСТРОЙКИ ===\n\n";
-            std::cout << "  1. Расширения по языкам\n";
-            std::cout << "  2. Исключённые папки\n";
-            std::cout << "  3. Исключённые файлы\n";
-            std::cout << "  4. Максимальный размер файла\n";
-            std::cout << "  5. Вывод\n";
-            std::cout << "  6. Языки\n";
-            std::cout << "  0. Сохранить и выйти\n";
-            std::cout << "> ";
+            if (printMenu) {
+                std::cout << "\n=== НАСТРОЙКИ ===\n\n";
+                std::cout << "  1. Расширения по языкам\n";
+                std::cout << "  2. Исключённые папки\n";
+                std::cout << "  3. Исключённые файлы\n";
+                std::cout << "  4. Максимальный размер файла\n";
+                std::cout << "  5. Вывод\n";
+                std::cout << "  6. Языки\n";
+                std::cout << "  0. Сохранить и выйти\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
-            int n = ReadInt(0, 6);
+            std::string input;
+            std::getline(std::cin, input);
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) continue;
+            input = input.substr(s, e - s + 1);
+
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { continue; }
+            if (n < 0 || n > 6) continue;
 
             if (n == 0) {
                 if (settings::Save()) {
@@ -727,6 +996,8 @@ namespace prompt {
                 }
                 return;
             }
+
+            printMenu = true;
 
             switch (n) {
                 case 1: EditExtensionSets(); break;
@@ -738,8 +1009,6 @@ namespace prompt {
             }
         }
     }
-
-    // ============ ПАРАМЕТРЫ ПОИСКА ============
 
     bool AskSearchOptions(file_searcher::SearchOptions& opt,
                           const regex_builder::SearchRequest& req) {
@@ -756,27 +1025,32 @@ namespace prompt {
         opt.MaxFileSizeMb = GetDefaultMaxFileSize();
         opt.ShowFirstN = settings::ShowFirstN;
 
+        bool printMenu = true;
         while (true) {
-            auto currentDir = fs::current_path();
-            std::string dirLabel;
-            if (opt.Directory == currentDir) {
-                dirLabel = "[текущая]";
-            } else {
-                auto u8 = opt.Directory.u8string();
-                dirLabel = std::string(u8.begin(), u8.end());
-            }
+            if (printMenu) {
+                auto currentDir = fs::current_path();
+                std::string dirLabel;
+                if (opt.Directory == currentDir) {
+                    dirLabel = "[текущая]";
+                } else {
+                    dirLabel = utf8::ToUtf8(opt.Directory);
+                }
 
-            std::cout << "\n";
-            std::cout << "Измените параметры поиска:\n";
-            std::cout << "  1. Начать поиск\n";
-            std::cout << "  2. Директория: " << dirLabel << "\n";
-            std::cout << "  3. Расширения: " << FormatSet(opt.Extensions) << "\n";
-            std::cout << "  4. Исключённые папки: " << FormatSet(opt.ExcludeDirs) << "\n";
-            std::cout << "  5. Исключённые файлы: " << FormatSet(opt.ExcludeFiles) << "\n";
-            std::cout << "  6. Максимальный размер: " << opt.MaxFileSizeMb << " МБ\n";
-            std::cout << "  7. Границы слов: " << (opt.WordBoundaries ? "да" : "нет") << "\n";
-            std::cout << "  0. Отмена\n";
-            std::cout << "> ";
+                std::cout << "\n";
+                std::cout << "Измените параметры поиска:\n";
+                std::cout << "  1. Начать поиск\n";
+                std::cout << "  2. Директория: " << dirLabel << "\n";
+                std::cout << "  3. Расширения: " << FormatSet(opt.Extensions) << "\n";
+                std::cout << "  4. Исключённые папки: " << FormatSet(opt.ExcludeDirs) << "\n";
+                std::cout << "  5. Исключённые файлы: " << FormatSet(opt.ExcludeFiles) << "\n";
+                std::cout << "  6. Максимальный размер: "
+                    << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ")
+                    << "\n";
+                std::cout << "  0. Отмена\n> ";
+                printMenu = false;
+            } else {
+                std::cout << "> ";
+            }
 
             std::string choice;
             std::getline(std::cin, choice);
@@ -788,12 +1062,21 @@ namespace prompt {
             if (choice == "0") return false;
             if (choice == "1") return true;
 
+            bool valid = (choice == "2" || choice == "3" || choice == "4" ||
+                          choice == "5" || choice == "6");
+            if (!valid) continue;
+
+            printMenu = true;
+
             if (choice == "2") {
-                auto dir = ReadLine("Директория (Enter — текущая): ");
+                auto dir = ReadLine("Директория (Enter — текущая, 0 — назад): ");
+                if (GoBack) { GoBack = false; printMenu = true; continue; }
                 if (!dir.empty()) {
                     fs::path dirPath = fs::u8path(dir);
-                    if (fs::exists(dirPath))
+                    if (fs::exists(dirPath) && fs::is_directory(dirPath))
                         opt.Directory = dirPath;
+                    else
+                        std::cout << colors::Error << "Директория не найдена: " << dir << colors::Reset << "\n";
                 }
             }
             else if (choice == "3") {
@@ -808,6 +1091,7 @@ namespace prompt {
                     }
                     std::cout << "  0. Отмена\n> ";
                     int n = ReadInt(0, (int)keys.size());
+                    if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.Extensions = settings::ExtensionSets[keys[n - 1]];
                 }
             }
@@ -823,6 +1107,7 @@ namespace prompt {
                     }
                     std::cout << "  0. Отмена\n> ";
                     int n = ReadInt(0, (int)keys.size());
+                    if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.ExcludeDirs = settings::ExcludeDirSets[keys[n - 1]];
                 }
             }
@@ -838,16 +1123,15 @@ namespace prompt {
                     }
                     std::cout << "  0. Отмена\n> ";
                     int n = ReadInt(0, (int)keys.size());
+                    if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.ExcludeFiles = settings::ExcludeFileSets[keys[n - 1]];
                 }
             }
             else if (choice == "6") {
-                std::cout << "Максимум МБ (-1 — без лимита): ";
+                std::cout << "Максимум МБ (-1 — без лимита, 0 — 0 МБ): ";
+                if (GoBack) { GoBack = false; printMenu = true; continue; }
                 int mb = ReadInt(-1, 10000);
                 opt.MaxFileSizeMb = mb;
-            }
-            else if (choice == "7") {
-                opt.WordBoundaries = !opt.WordBoundaries;
             }
         }
     }

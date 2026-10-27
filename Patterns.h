@@ -19,9 +19,9 @@ namespace patterns {
             case FormatType::Url:
                 return R"(https?://[^\s"']+)";
             case FormatType::Ip:
-                return R"((?<![\d.])\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}(?![\d.]))";
+                return R"(\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b)";
             case FormatType::Guid:
-                return R"((?<![0-9a-fA-F-])[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![0-9a-fA-F-]))";
+                return R"(\b[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\b)";
             case FormatType::Date:
                 return R"(\b(\d{4}-\d{1,2}-\d{1,2}|\d{1,2}\.\d{1,2}\.\d{4}|\d{4}/\d{1,2}/\d{1,2})\b)";
             default:

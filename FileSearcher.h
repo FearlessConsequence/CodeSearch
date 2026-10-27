@@ -15,7 +15,6 @@ namespace file_searcher {
         std::vector<std::string> ExcludeFiles;
         int MaxFileSizeMb = 200;
         int ShowFirstN = 50;
-        bool WordBoundaries = false; 
     };
 
     struct SearchResult {

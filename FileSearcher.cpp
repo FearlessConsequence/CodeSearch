@@ -1,4 +1,7 @@
+
 #include "FileSearcher.h"
+#include <cctype>
+#include "RegexBuilder.h"
 #include "Colors.h"
 #include <regex>
 #include <fstream>
@@ -6,110 +9,73 @@
 #include <thread>
 #include <mutex>
 #include <algorithm>
+#include "Utf8.h"
 #include <iostream>
 #include <atomic>
 
 namespace file_searcher {
 
-    // ============ УТИЛИТЫ ============
-
-    static std::string ToUtf8(const fs::path& p) {
-        return p.u8string();
-    }
+    using utf8::ToUtf8;
 
     static bool MatchesMask(const std::string& fileName, const std::string& mask) {
-        auto lower = [](std::string s) {
-            for (auto& c : s) c = std::tolower((unsigned char)c);
-            return s;
-        };
-        std::string fn = lower(fileName);
-        std::string m = lower(mask);
-
-        if (!m.empty() && m.front() == '*') {
-            std::string suffix = m.substr(1);
-            return fn.size() >= suffix.size() &&
-                   fn.compare(fn.size() - suffix.size(), suffix.size(), suffix) == 0;
-        }
-        if (!m.empty() && m.back() == '*') {
-            std::string prefix = m.substr(0, m.size() - 1);
-            return fn.compare(0, prefix.size(), prefix) == 0;
-        }
-        return fn == m;
+        auto lower = [](std::string s) { for (auto& c : s) c = std::tolower((unsigned char)c); return s; };
+        std::string fn = lower(fileName), m = lower(mask);
+        if (m.empty()) return false;
+        bool leftStar  = m.front() == '*';
+        bool rightStar = m.back()  == '*';
+        std::string core = m;
+        if (leftStar)  core.erase(core.begin());
+        if (rightStar && !core.empty()) core.pop_back();
+        if (leftStar && rightStar) return fn.find(core) != std::string::npos;
+        if (leftStar)  return fn.size() >= core.size() &&
+                            fn.compare(fn.size() - core.size(), core.size(), core) == 0;
+        if (rightStar) return fn.compare(0, core.size(), core) == 0;
+        return fn == core;
     }
 
     static bool InVector(const std::vector<std::string>& vec, const std::string& item) {
         for (const auto& v : vec) {
             if (v.size() == item.size()) {
                 bool eq = true;
-                for (size_t i = 0; i < v.size(); ++i) {
-                    if (std::tolower((unsigned char)v[i]) !=
-                        std::tolower((unsigned char)item[i])) {
-                        eq = false;
-                        break;
-                    }
-                }
+                for (size_t i = 0; i < v.size(); ++i)
+                    if (std::tolower((unsigned char)v[i]) != std::tolower((unsigned char)item[i])) { eq = false; break; }
                 if (eq) return true;
             }
         }
         return false;
     }
 
-    // ============ ОБХОД ФАЙЛОВ ============
-
     static std::vector<fs::path> EnumerateFiles(const SearchOptions& opt) {
         std::vector<fs::path> result;
-
         try {
-            for (auto it = fs::recursive_directory_iterator(
-                     opt.Directory,
-                     fs::directory_options::skip_permission_denied);
-                 it != fs::recursive_directory_iterator(); ++it)
-            {
+            for (auto it = fs::recursive_directory_iterator(opt.Directory, fs::directory_options::skip_permission_denied);
+                 it != fs::recursive_directory_iterator(); ++it) {
                 const auto& entry = *it;
-
                 if (entry.is_directory()) {
                     std::string name = ToUtf8(entry.path().filename());
-                    if (InVector(opt.ExcludeDirs, name)) {
-                        it.disable_recursion_pending();
-                        continue;
-                    }
+                    if (InVector(opt.ExcludeDirs, name)) { it.disable_recursion_pending(); continue; }
                     continue;
                 }
-
                 if (!entry.is_regular_file()) continue;
-
                 std::string fileName = ToUtf8(entry.path().filename());
-
                 bool excluded = false;
-                for (const auto& mask : opt.ExcludeFiles) {
-                    if (MatchesMask(fileName, mask)) {
-                        excluded = true;
-                        break;
-                    }
-                }
+                for (const auto& mask : opt.ExcludeFiles) if (MatchesMask(fileName, mask)) { excluded = true; break; }
                 if (excluded) continue;
-
                 if (!opt.Extensions.empty()) {
                     std::string ext = ToUtf8(entry.path().extension());
                     if (!InVector(opt.Extensions, ext)) continue;
                 }
-
                 try {
-                    auto sizeMb = fs::file_size(entry.path()) / 1024 / 1024;
-                    if (opt.MaxFileSizeMb > 0 && sizeMb > (uintmax_t)opt.MaxFileSizeMb)
-                        continue;
-                }
-                catch (...) { continue; }
-
+                    if (opt.MaxFileSizeMb > 0) {
+                        auto bytes = fs::file_size(entry.path());
+                        if (bytes > (uintmax_t)opt.MaxFileSizeMb * 1024 * 1024) continue;
+                    }
+                } catch (...) { continue; }
                 result.push_back(entry.path());
             }
-        }
-        catch (...) { }
-
+        } catch (...) { }
         return result;
     }
-
-    // ============ ЧТЕНИЕ ФАЙЛА ============
 
     static std::string ReadFile(const fs::path& file) {
         std::ifstream in(file, std::ios::binary);
@@ -119,467 +85,237 @@ namespace file_searcher {
         return buffer.str();
     }
 
-    // ============ ПОСТРОЧНЫЙ ПОИСК ============
+    struct LineTracker {
+        const std::string& content;
+        size_t pos = 0;
+        int line = 1;
+        int At(size_t target) {
+            if (target < pos) { pos = 0; line = 1; }
+            for (size_t i = pos; i < target; ++i) if (content[i] == '\n') line++;
+            pos = target;
+            return line;
+        }
+    };
 
-    static void SearchLineByLine(
-        const fs::path& file,
-        const std::regex& regex,
-        std::vector<SearchResult>& results)
-    {
+    static std::string TrimmedLineAt(const std::string& content, size_t pos, size_t maxLen = 80) {
+        size_t lineStart = content.rfind('\n', pos);
+        lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+        size_t lineEnd = content.find('\n', pos);
+        if (lineEnd == std::string::npos) lineEnd = content.size();
+        std::string text = content.substr(lineStart, lineEnd - lineStart);
+        size_t s = text.find_first_not_of(" \t\r");
+        size_t e = text.find_last_not_of(" \t\r");
+        if (s == std::string::npos) return "";
+        text = text.substr(s, e - s + 1);
+        if (text.size() > maxLen) {
+            size_t rel = (pos >= lineStart + s) ? (pos - lineStart - s) : 0;
+            size_t st = (rel > maxLen / 2) ? rel - maxLen / 2 : 0;
+            if (st + maxLen > text.size()) st = text.size() - maxLen;
+            text = "..." + text.substr(st, maxLen) + "...";
+        }
+        return text;
+    }
+
+    static void SearchLineByLine(const fs::path& file, const std::regex& regex, std::vector<SearchResult>& results) {
         std::ifstream in(file, std::ios::binary);
         if (!in) return;
-
         std::string line;
         int lineNum = 0;
-
         while (std::getline(in, line)) {
             lineNum++;
+            if (!line.empty() && line.back() == '\r') line.pop_back();
             if (std::regex_search(line, regex)) {
-                if (!line.empty() && line.back() == '\r') line.pop_back();
                 size_t start = line.find_first_not_of(" \t");
                 size_t end = line.find_last_not_of(" \t");
-                std::string trimmed = (start == std::string::npos)
-                    ? "" : line.substr(start, end - start + 1);
-
+                std::string trimmed = (start == std::string::npos) ? "" : line.substr(start, end - start + 1);
+                if (trimmed.size() > 80) trimmed = trimmed.substr(0, 80) + "...";
                 results.push_back({file, lineNum, trimmed});
             }
         }
     }
 
-    // ============ ПОИСК ПО ВСЕМУ ФАЙЛУ (regex) ============
-
-    static void SearchWholeFile(
-        const fs::path& file,
-        const std::regex& regex,
-        std::vector<SearchResult>& results)
-    {
+    static void SearchWholeFile(const fs::path& file, const std::string& pattern, std::vector<SearchResult>& results) {
         std::string content = ReadFile(file);
         if (content.empty()) return;
-
-        auto begin = std::sregex_iterator(content.begin(), content.end(), regex);
-        auto end = std::sregex_iterator();
-
-        for (auto it = begin; it != end; ++it) {
-            const auto& m = *it;
-            int line = 1;
-            for (size_t i = 0; i < (size_t)m.position(); ++i)
-                if (content[i] == '\n') line++;
-
-            std::string text = m.str();
-            size_t nl = text.find('\n');
-            if (nl != std::string::npos) text = text.substr(0, nl);
-            if (text.size() > 80) text = text.substr(0, 80) + "...";
-
+        std::regex rx;
+        try { rx = std::regex(pattern, std::regex::multiline); } catch (...) { return; }
+        LineTracker lines{content};
+        for (auto it = std::sregex_iterator(content.begin(), content.end(), rx); it != std::sregex_iterator(); ++it) {
+            size_t pos = it->position();
+            int line = lines.At(pos);
+            std::string text = TrimmedLineAt(content, pos);
             results.push_back({file, line, text});
         }
     }
 
-    // ============ ПАРСЕР БЛОКОВ ============
-
-    // Разбор X по %, *, ^ — на части
-    static std::vector<std::string> SplitX(const std::string& x) {
-        std::vector<std::string> parts;
-        std::string current;
-        for (char c : x) {
-            if (c == '%' || c == '*' || c == '^') {
-                if (!current.empty()) parts.push_back(current);
-                current.clear();
-            } else {
-                current += c;
-            }
+    static void SearchStructureXYZ(const fs::path& file, const std::string& pattern, std::vector<SearchResult>& results) {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+        std::regex rx;
+        try { rx = std::regex(pattern, std::regex::multiline); } catch (...) { return; }
+        LineTracker lines{content};
+        for (auto it = std::sregex_iterator(content.begin(), content.end(), rx); it != std::sregex_iterator(); ++it) {
+            const auto& m = *it;
+            size_t pos = (m.size() > 1 && m[1].matched) ? m.position(1) : m.position();
+            int line = lines.At(pos);
+            std::string text = TrimmedLineAt(content, pos);
+            results.push_back({file, line, text});
         }
-        if (!current.empty()) parts.push_back(current);
-        return parts;
     }
 
-    static bool CheckLeftBoundary(const std::string& content, size_t pos) {
-        if (pos == 0) return true;
-        char prev = content[pos - 1];
-        return !(std::isalnum((unsigned char)prev) || prev == '_');
-    }
+    static void SearchXButNotY(const fs::path& file, const std::string& xPat, const std::string& yPat, std::vector<SearchResult>& results) {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+        std::regex rxX, rxY;
+        try { rxX = std::regex(xPat, std::regex::multiline); } catch (...) { return; }
+        try { rxY = std::regex(yPat, std::regex::multiline); } catch (...) { return; }
 
-    static bool CheckRightBoundary(const std::string& content, size_t pos, size_t len) {
-        size_t end = pos + len;
-        if (end >= content.size()) return true;
-        char next = content[end];
-        return !(std::isalnum((unsigned char)next) || next == '_');
-    }
-
-    static bool NeedBoundaryCheck(const std::string& s) {
-        if (s.empty()) return false;
-        char c = s[0];
-        return std::isalnum((unsigned char)c) || c == '_';
-    }
-
-    // Найти X (с учётом % — пропуск пробелов и переносов)
-    static bool FindX(const std::string& content,
-                      const std::vector<std::string>& xParts,
-                      size_t startPos,
-                      size_t& foundPos)
-    {
-        size_t tempPos = startPos;
-        while (tempPos < content.size()) {
-            size_t p = content.find(xParts[0], tempPos);
-            if (p == std::string::npos) return false;
-
-            size_t cur = p + xParts[0].size();
-            bool ok = true;
-
-            for (size_t i = 1; i < xParts.size(); ++i) {
-                while (cur < content.size() &&
-                       (content[cur] == ' ' || content[cur] == '\t' ||
-                        content[cur] == '\n' || content[cur] == '\r'))
-                    cur++;
-
-                if (content.compare(cur, xParts[i].size(), xParts[i]) != 0) {
-                    ok = false;
-                    break;
-                }
-                cur += xParts[i].size();
-            }
-
-            if (ok) {
-                if (NeedBoundaryCheck(xParts[0]) && !CheckLeftBoundary(content, p)) {
-                    tempPos = p + 1;
-                    continue;
-                }
-                foundPos = p;
-                return true;
-            }
-
-            tempPos = p + 1;
+        std::vector<std::pair<size_t, size_t>> yRanges;
+        for (auto it = std::sregex_iterator(content.begin(), content.end(), rxY); it != std::sregex_iterator(); ++it) {
+            yRanges.push_back({(size_t)it->position(), (size_t)it->position() + it->length()});
         }
-        return false;
-    }
 
-    // Парсер блока — считать скобки до баланса 0, игнорируя строки
-    static bool ParseBlock(const std::string& content,
-                           size_t openPos,
-                           char openCh,
-                           char closeCh,
-                           size_t& closePos)
-    {
-        int depth = 0;
-        bool inString = false;
-
-        for (size_t i = openPos; i < content.size(); ++i) {
-            char c = content[i];
-
-            if (inString) {
-                if (c == '\\') { i++; continue; }
-                if (c == '"') inString = false;
-                continue;
-            }
-
-            if (c == '"') { inString = true; continue; }
-
-            if (c == openCh) depth++;
-            else if (c == closeCh) {
-                depth--;
-                if (depth == 0) {
-                    closePos = i;
-                    return true;
-                }
-            }
+        LineTracker lines{content};
+        for (auto it = std::sregex_iterator(content.begin(), content.end(), rxX); it != std::sregex_iterator(); ++it) {
+            size_t xs = it->position(), xe = xs + it->length();
+            bool intersects = false;
+            for (auto& yr : yRanges) if (xs < yr.second && xe > yr.first) { intersects = true; break; }
+            if (intersects) continue;
+            int line = lines.At(xs);
+            std::string text = TrimmedLineAt(content, xs);
+            results.push_back({file, line, text});
         }
-        return false;
     }
 
-    // ============ ПОИСК БЛОКА ============
-
-    static void SearchBlock(
-    const fs::path& file,
-    const regex_builder::SearchRequest& req,
-    const SearchOptions& options,
-    std::vector<SearchResult>& results)
-    {
+    static void SearchArgsLength(const fs::path& file, const regex_builder::SearchRequest& req, std::vector<SearchResult>& results) {
         std::string content = ReadFile(file);
         if (content.empty()) return;
 
-        auto xParts = SplitX(req.X);
-        if (xParts.empty()) return;
-
-        // Режим: X содержит { или (
-        bool hasBrace = req.X.find('{') != std::string::npos;
-        bool hasParen = req.X.find('(') != std::string::npos;
-        bool useParser = hasBrace || hasParen;
-
-        char openCh = hasBrace ? '{' : '(';
-        char closeCh = hasBrace ? '}' : ')';
-
-        size_t searchPos = 0;
-
-        while (searchPos < content.size()) {
-            size_t xPos;
-            if (!FindX(content, xParts, searchPos, xPos))
-                break;
-
-            size_t innerStart, innerEnd;
-
-            if (useParser) {
-                // Режим парсера — искать по всем строкам
-                size_t openPos = content.find(openCh, xPos);
-                if (openPos == std::string::npos) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                if (openPos - xPos > 200) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                size_t closePos;
-                if (!ParseBlock(content, openPos, openCh, closeCh, closePos)) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                if (req.Z.find(closeCh) == std::string::npos) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                innerStart = openPos;
-                innerEnd = closePos;
-            }
-            else {
-                // Режим одной строки
-                size_t lineEnd = content.find('\n', xPos);
-                if (lineEnd == std::string::npos) lineEnd = content.size();
-
-                size_t zPos = content.find(req.Z, xPos);
-                if (zPos == std::string::npos || zPos > lineEnd) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                // Проверка границы для Z
-                if (options.WordBoundaries && NeedBoundaryCheck(req.Z)
-                    && !CheckLeftBoundary(content, zPos)) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                std::string inner = content.substr(xPos, zPos - xPos);
-                if (inner.find(req.Y) == std::string::npos) {
-                    searchPos = xPos + 1;
-                    continue;
-                }
-
-                innerStart = xPos;
-                innerEnd = zPos + req.Z.size();
-            }
-
-            // Ищем ВСЕ Y внутри [innerStart, innerEnd]
-            size_t yPos = innerStart;
-            while (yPos < innerEnd) {
-                size_t found = content.find(req.Y, yPos);
-                if (found == std::string::npos || found >= innerEnd) break;
-
-                // Проверка границы для Y
-                if (options.WordBoundaries && NeedBoundaryCheck(req.Y)
-                    && !CheckLeftBoundary(content, found)) {
-                    yPos = found + 1;
-                    continue;
-                }
-
-                // Номер строки Y
-
-                // Номер строки Y
-                int line = 1;
-                for (size_t i = 0; i < found; ++i)
-                    if (content[i] == '\n') line++;
-
-                // Текст — строка Y
-                size_t lineStart = content.rfind('\n', found);
-                lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
-                size_t lineEnd2 = content.find('\n', found);
-                if (lineEnd2 == std::string::npos) lineEnd2 = content.size();
-
-                std::string text = content.substr(lineStart, lineEnd2 - lineStart);
-
-                size_t s = text.find_first_not_of(" \t\r");
-                size_t e = text.find_last_not_of(" \t\r");
-                if (s != std::string::npos)
-                    text = text.substr(s, e - s + 1);
-                else
-                    text = "";
-
-                if (text.size() > 80) text = text.substr(0, 80) + "...";
-
-                results.push_back({file, line, text});
-
-                yPos = found + req.Y.size();
-            }
-
-            searchPos = xPos + 1;
-        }
-    }
-
-        // ============ ПОИСК ПО АРГУМЕНТАМ ============
-
-    static void SearchArgsLength(
-        const fs::path& file,
-        const regex_builder::SearchRequest& req,
-        std::vector<SearchResult>& results)
-    {
-        std::string content = ReadFile(file);
-        if (content.empty()) return;
-
-        // Ищем все `(` в файле
+        LineTracker lines{content};
         for (size_t i = 0; i < content.size(); ++i) {
             if (content[i] != '(') continue;
+            size_t jb = i;
+            while (jb > 0 && (content[jb - 1] == ' ' || content[jb - 1] == '\t')) --jb;
+            if (jb == 0) continue;
+            if (!std::isalnum((unsigned char)content[jb - 1]) && content[jb - 1] != '_') continue;
+            
 
-            // Перед `(` — должно быть имя метода (буква)
-            if (i == 0) continue;
-            if (!std::isalnum((unsigned char)content[i - 1]) &&
-                content[i - 1] != '_') continue;
-
-            // Находим парную `)`
             size_t closePos = std::string::npos;
             int depth = 0;
             bool inString = false;
+            char stringChar = 0;
+            bool inLineComment = false;
+            bool inBlockComment = false;
 
             for (size_t j = i; j < content.size(); ++j) {
                 char c = content[j];
+                char next = (j + 1 < content.size()) ? content[j + 1] : 0;
+
+                if (inLineComment) { if (c == '\n') inLineComment = false; continue; }
+                if (inBlockComment) { if (c == '*' && next == '/') { inBlockComment = false; j++; } continue; }
 
                 if (inString) {
                     if (c == '\\') { j++; continue; }
-                    if (c == '"') inString = false;
+                    if (c == stringChar) inString = false;
                     continue;
                 }
-                if (c == '"') { inString = true; continue; }
+
+                if (c == '"' || c == '\'' || c == '`') { inString = true; stringChar = c; continue; }
+                if (c == '@' && next == '"') { inString = true; stringChar = '"'; j++; continue; }
+                if (c == '/' && next == '/') { inLineComment = true; j++; continue; }
+                if (c == '/' && next == '*') { inBlockComment = true; j++; continue; }
 
                 if (c == '(') depth++;
-                else if (c == ')') {
-                    depth--;
-                    if (depth == 0) {
-                        closePos = j;
-                        break;
-                    }
-                }
+                else if (c == ')') { depth--; if (depth == 0) { closePos = j; break; } }
             }
-
             if (closePos == std::string::npos) continue;
 
-            // Внутри — считаем запятые (только на верхнем уровне вложенности)
             std::string inner = content.substr(i + 1, closePos - i - 1);
-
-            // Считаем аргументы: пустое → 0, иначе — запятых + 1
-            // Но нужно игнорировать запятые внутри вложенных скобок
             int commas = 0;
-            bool hasArg = false;
             int nested = 0;
+            int angle = 0;
             bool inStr2 = false;
-
+            char strChar2 = 0;
+            bool inLC2 = false, inBC2 = false;
+            
             for (size_t k = 0; k < inner.size(); ++k) {
                 char c = inner[k];
+                char next = (k + 1 < inner.size()) ? inner[k + 1] : 0;
 
+                if (inLC2) { if (c == '\n') inLC2 = false; continue; }
+                if (inBC2) { if (c == '*' && next == '/') { inBC2 = false; k++; } continue; }
                 if (inStr2) {
                     if (c == '\\') { k++; continue; }
-                    if (c == '"') inStr2 = false;
+                    if (c == strChar2) inStr2 = false;
                     continue;
                 }
-                if (c == '"') { inStr2 = true; continue; }
+                if (c == '"' || c == '\'' || c == '`') { inStr2 = true; strChar2 = c; continue; }
+                if (c == '@' && next == '"') { inStr2 = true; strChar2 = '"'; k++; continue; }
+                if (c == '/' && next == '/') { inLC2 = true; k++; continue; }
+                if (c == '/' && next == '*') { inBC2 = true; k++; continue; }
 
                 if (c == '(') nested++;
                 else if (c == ')') nested--;
-                else if (c == ',' && nested == 0) {
-                    commas++;
-                    hasArg = true;
-                }
-                else if (!std::isspace((unsigned char)c)) {
-                    hasArg = true;
-                }
+                else if (c == '<') angle++;
+                else if (c == '>') { if (angle > 0) angle--; }
+                else if (c == ',' && nested == 0 && angle == 0) { commas++;}
+    
             }
 
-            if (!hasArg) continue;  // Пустой () — пропускаем
+            int args;
+            if (inner.find_first_not_of(" \t\r\n") == std::string::npos) {
+                args = 0;                    // пустые скобки — 0 аргументов
+            } else {
+                args = commas + 1;
+            }
 
-            int args = commas + 1;
-
-            // Проверка по режиму
             bool ok = false;
             switch (req.NumberCompareValue) {
-                case regex_builder::NumberCompare::Greater:
-                    ok = (args > req.MinCount);
-                    break;
-                case regex_builder::NumberCompare::Equal:
-                    ok = (args == req.MinCount);
-                    break;
-                case regex_builder::NumberCompare::Less:
-                    ok = (args < req.MinCount);
-                    break;
-                case regex_builder::NumberCompare::Between:
-                    ok = (args >= req.MinCount && args <= req.MaxCount);
-                    break;
+                case regex_builder::NumberCompare::Greater: ok = (args > req.MinCount); break;
+                case regex_builder::NumberCompare::Equal:   ok = (args == req.MinCount); break;
+                case regex_builder::NumberCompare::Less:    ok = (args < req.MinCount); break;
+                case regex_builder::NumberCompare::Between: ok = (args >= req.MinCount && args <= req.MaxCount); break;
             }
-
             if (!ok) continue;
 
-            // Номер строки
-            int line = 1;
-            for (size_t k = 0; k < i; ++k)
-                if (content[k] == '\n') line++;
-
-            // Текст — строка, где `(`
-            size_t lineStart = content.rfind('\n', i);
-            lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
-            size_t lineEnd = content.find('\n', i);
-            if (lineEnd == std::string::npos) lineEnd = content.size();
-
-            std::string text = content.substr(lineStart, lineEnd - lineStart);
-            size_t s = text.find_first_not_of(" \t\r");
-            size_t e = text.find_last_not_of(" \t\r");
-            if (s != std::string::npos)
-                text = text.substr(s, e - s + 1);
-            else
-                text = "";
-
-            if (text.size() > 80) text = text.substr(0, 80) + "...";
-
+            int line = lines.At(i);
+            std::string text = TrimmedLineAt(content, i);
             results.push_back({file, line, text});
-
-            // Прыгаем за `)`
             i = closePos;
         }
     }
 
-    // ============ ГЛАВНЫЙ ПОИСК ============
-
-    std::vector<SearchResult> Search(
-        const regex_builder::SearchRequest& req,
-        const std::string& pattern,
-        const SearchOptions& options)
-    {
+    std::vector<SearchResult> Search(const regex_builder::SearchRequest& req, const std::string& pattern, const SearchOptions& options) {
         std::vector<SearchResult> results;
-
         auto files = EnumerateFiles(options);
         std::cout << "Найдено файлов: " << files.size() << "\n\n";
 
-        std::regex regex_obj;
-        try {
-            regex_obj = std::regex(pattern);
-        }
-        catch (const std::regex_error& e) {
-            std::cerr << "Ошибка в regex: " << e.what() << "\n";
-            return results;
-        }
-
-        // Режим
-        bool isBlock = (req.Type == regex_builder::SearchType::Structure &&
-            req.Structure == regex_builder::StructureType::XAnywhereBeforeYBeforeZ);
-
-        bool isMultiLineRegex = (req.Type == regex_builder::SearchType::Structure &&
-            req.Structure == regex_builder::StructureType::XEmpty);
-
+        bool isStructureXEmpty = (req.Type == regex_builder::SearchType::Structure &&
+                                  req.Structure == regex_builder::StructureType::XEmpty);
+        bool isStructureXYZ = (req.Type == regex_builder::SearchType::Structure &&
+                               req.Structure == regex_builder::StructureType::XAnywhereBeforeYBeforeZ);
+        bool isCombinationXOrY = (req.Type == regex_builder::SearchType::Combination &&
+                                  req.Combination == regex_builder::CombinationType::XOrY);
+        bool isCombinationXButNotY = (req.Type == regex_builder::SearchType::Combination &&
+                                      req.Combination == regex_builder::CombinationType::XButNotY);
         bool isArgsLength = (req.Type == regex_builder::SearchType::Quantity &&
-            req.Quantity == regex_builder::QuantityType::ArgsLength);
-        
+                             req.Quantity == regex_builder::QuantityType::ArgsLength);
+
+        std::string yPattern;
+        if (isCombinationXButNotY)
+            yPattern = regex_builder::EscapeXyz(req.Y);
+
+        std::regex regex_obj;
+        bool needRegex = !isArgsLength && !isCombinationXButNotY && !isStructureXYZ && !isStructureXEmpty && !isCombinationXOrY;
+        if (needRegex) {
+            try { regex_obj = std::regex(pattern); }
+            catch (const std::regex_error& e) { std::cerr << "Ошибка в regex: " << e.what() << "\n"; return results; }
+        }
+
         std::mutex mtx;
         unsigned int numThreads = std::thread::hardware_concurrency();
         if (numThreads == 0) numThreads = 4;
-
+        if (numThreads > files.size()) numThreads = (unsigned int)std::max<size_t>(1, files.size());
         std::vector<std::thread> threads;
         std::atomic<size_t> index{0};
 
@@ -588,36 +324,31 @@ namespace file_searcher {
             while (true) {
                 size_t i = index.fetch_add(1);
                 if (i >= files.size()) break;
-
                 try {
-                    if (isBlock)
-                        SearchBlock(files[i], req, options, local);
+                    if (isStructureXYZ)
+                        SearchStructureXYZ(files[i], pattern, local);
+                    else if (isStructureXEmpty || isCombinationXOrY)
+                        SearchWholeFile(files[i], pattern, local);
+                    else if (isCombinationXButNotY)
+                        SearchXButNotY(files[i], pattern, yPattern, local);
                     else if (isArgsLength)
                         SearchArgsLength(files[i], req, local);
-                    else if (isMultiLineRegex)
-                        SearchWholeFile(files[i], regex_obj, local);
                     else
                         SearchLineByLine(files[i], regex_obj, local);
-                }
-                catch (...) { }
+                } catch (...) { }
             }
             std::lock_guard<std::mutex> lock(mtx);
             results.insert(results.end(), local.begin(), local.end());
         };
 
-        for (unsigned int t = 0; t < numThreads; ++t)
-            threads.emplace_back(worker);
-        for (auto& t : threads)
-            if (t.joinable()) t.join();
+        for (unsigned int t = 0; t < numThreads; ++t) threads.emplace_back(worker);
+        for (auto& t : threads) if (t.joinable()) t.join();
 
-        std::sort(results.begin(), results.end(),
-            [](const SearchResult& a, const SearchResult& b) {
-                auto sa = ToUtf8(a.File);
-                auto sb = ToUtf8(b.File);
-                if (sa != sb) return sa < sb;
-                return a.Line < b.Line;
-            });
-
+        std::sort(results.begin(), results.end(), [](const SearchResult& a, const SearchResult& b) {
+            auto sa = ToUtf8(a.File), sb = ToUtf8(b.File);
+            if (sa != sb) return sa < sb;
+            return a.Line < b.Line;
+        });
         return results;
     }
 }

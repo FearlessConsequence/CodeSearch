@@ -239,6 +239,7 @@ namespace TestProject
         // А это ещё один
 
         public void Work()
+        public static void Work()
         {
             // внутренний комментарий
             int z = 5; // в конце
