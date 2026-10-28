@@ -111,7 +111,9 @@ namespace prompt {
         auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да, 0 — назад): ");
         if (GoBack) return false;
 
-        req.WordWholeOnly = !(w == "n" || w == "no" || w == "нет");
+        std::string lw = w;
+        for (auto& c : lw) c = (char)std::tolower((unsigned char)c);
+        req.WordWholeOnly = !(lw == "n" || lw == "no" || lw == "нет");
         return true;
     }
 
@@ -141,17 +143,30 @@ namespace prompt {
             if (GoBack) return false;
 
             if (req.Structure == regex_builder::StructureType::XEmpty) {
+                std::cout << "Выберите параметр:\n";
+                std::cout << "  1. Строго пусто\n";
+                std::cout << "  2. Не более N символов без пробелов\n";
+                std::cout << "  3. Не более N строк\n";
+                std::cout << "  0. Назад\n> ";
+                req.EmptyMetricValue = (regex_builder::EmptyMetric)ReadInt(1, 3);
+                if (GoBack) continue;
+
+                if (req.EmptyMetricValue != regex_builder::EmptyMetric::StrictlyEmpty) {
+                    std::cout << "Сколько (0 — назад): ";
+                    req.EmptyMaxCount = ReadInt(0, 10000);
+                    if (GoBack) continue;
+                }
+
                 while (true) {
-                    req.X = ReadLine("Что должно быть пустым (0 — назад): ");
+                    req.X = ReadLine("Название оператора (0 — назад): ");
                     if (GoBack) break;
                     if (!req.X.empty()) return true;
-
-                    std::cout << colors::Error << "Не может быть пустым."
-                              << colors::Reset << "\n";
+                    std::cout << colors::Error << "Не может быть пустым." << colors::Reset << "\n";
                 }
                 if (GoBack) continue;
                 return true;
             }
+
             else {
                 while (true) {
                     std::cout << colors::Dim
@@ -718,7 +733,9 @@ namespace prompt {
         int i = 1;
         for (const auto& kv : settings::MaxFileSizeSets) {
             std::cout << "  " << i++ << ". [" << kv.first << "] "
-                      << kv.second << " МБ\n";
+                    << (kv.second < 0 ? std::string("без лимита")
+                                        : std::to_string(kv.second) + " МБ")
+                    << "\n";
         }
         std::cout << "  По умолчанию: " << settings::DefaultMaxFileSizeSet << "\n\n";
     }
@@ -761,7 +778,6 @@ namespace prompt {
                 if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
                 std::cout << "Размер в МБ (-1 — без лимита, 0 — 0 МБ): ";
-                if (GoBack) { GoBack = false; continue; }
                 int val = ReadInt(-1, 100000);
                 settings::MaxFileSizeSets[name] = val;
                 std::cout << "\nДобавлено.\n\n";
@@ -1011,16 +1027,21 @@ namespace prompt {
     }
 
     bool AskSearchOptions(file_searcher::SearchOptions& opt,
-                          const regex_builder::SearchRequest& req) {
+                        const regex_builder::SearchRequest& req) {
         opt.Directory = fs::current_path();
 
-        auto extIt = settings::ExtensionSets.find(req.Language);
-        if (extIt != settings::ExtensionSets.end())
-            opt.Extensions = extIt->second;
-        else
+        if (req.Type == regex_builder::SearchType::Comment) {
+            auto extIt = settings::ExtensionSets.find(req.Language);
+            if (extIt != settings::ExtensionSets.end())
+                opt.Extensions = extIt->second;
+            else
+                opt.Extensions = GetDefaultExtensions();
+        } else {
             opt.Extensions = GetDefaultExtensions();
+        }
 
         opt.ExcludeDirs = GetDefaultExcludeDirs();
+
         opt.ExcludeFiles = GetDefaultExcludeFiles();
         opt.MaxFileSizeMb = GetDefaultMaxFileSize();
         opt.ShowFirstN = settings::ShowFirstN;
@@ -1129,7 +1150,6 @@ namespace prompt {
             }
             else if (choice == "6") {
                 std::cout << "Максимум МБ (-1 — без лимита, 0 — 0 МБ): ";
-                if (GoBack) { GoBack = false; printMenu = true; continue; }
                 int mb = ReadInt(-1, 10000);
                 opt.MaxFileSizeMb = mb;
             }

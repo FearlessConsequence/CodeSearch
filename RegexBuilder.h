@@ -14,6 +14,12 @@ namespace regex_builder {
         Comment = 6
     };
 
+    enum class EmptyMetric {
+        StrictlyEmpty = 1,
+        MaxChars = 2,
+        MaxLines = 3
+    };
+
     enum class StructureType {
         XEmpty = 1,
         XAnywhereBeforeYBeforeZ = 2
@@ -59,6 +65,8 @@ namespace regex_builder {
         // Тип 3
         std::string X, Y, Z;
         StructureType Structure = StructureType::XEmpty;
+        EmptyMetric EmptyMetricValue = EmptyMetric::StrictlyEmpty;
+        int EmptyMaxCount = 0;
 
         // Тип 4
         std::string Exclude;
@@ -79,5 +87,6 @@ namespace regex_builder {
     std::string Build(const SearchRequest& req);
     std::string Escape(const std::string& s);
     std::string EscapeXyz(const std::string& s);
+    std::string EscapeXyzWithBounds(const std::string& s);
     std::string WrapWord(const std::string& s);
 }

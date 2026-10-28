@@ -32,6 +32,8 @@ namespace settings {
         int MinCount = 0, MaxCount = 0;
         int CommentType = 1;
         std::string CommentWord;
+        int EmptyMetricValue = 1;
+        int EmptyMaxCount = 0;
     };
 
     inline std::vector<HistoryEntry> History;
@@ -52,6 +54,8 @@ namespace settings {
         int MinCount = 0, MaxCount = 0;
         int CommentType = 1;
         std::string CommentWord;
+        int EmptyMetricValue = 1;
+        int EmptyMaxCount = 0;
     };
 
     inline std::vector<FavoriteEntry> Favorites;
@@ -84,9 +88,45 @@ namespace settings {
     inline std::vector<LanguageInfo> FavoriteLanguages;
     inline std::string DefaultLanguage = "C#";
 
+        inline void SetDefaults() {
+        if (ExtensionSets.empty()) {
+            ExtensionSets["C#"]      = {".cs"};
+            ExtensionSets["C++"]     = {".cpp", ".h", ".hpp"};
+            ExtensionSets["C++, C#"] = {".cpp", ".h", ".hpp", ".cs"};
+            ExtensionSets["Python"]  = {".py"};
+            ExtensionSets["Web"]     = {".js", ".ts", ".html", ".css"};
+            if (DefaultExtensionSet.empty()) DefaultExtensionSet = "C#";
+        }
+        if (ExcludeDirSets.empty()) {
+            ExcludeDirSets["Default"] = {"bin", "obj", ".git", ".vs"};
+            ExcludeDirSets["None"]    = {};
+            ExcludeDirSets["Python"]  = {"__pycache__", ".venv", "venv"};
+            ExcludeDirSets["Web"]     = {"node_modules", "dist", "build"};
+            if (DefaultExcludeDirSet.empty()) DefaultExcludeDirSet = "Default";
+        }
+        if (ExcludeFileSets.empty()) {
+            ExcludeFileSets["None"] = {};
+            if (DefaultExcludeFileSet.empty()) DefaultExcludeFileSet = "None";
+        }
+        if (MaxFileSizeSets.empty()) {
+            MaxFileSizeSets["Все читать"] = -1;
+            MaxFileSizeSets["До 10 МБ"]   = 10;
+            MaxFileSizeSets["До 100 МБ"]  = 100;
+            MaxFileSizeSets["До 200 МБ"]  = 200;
+            if (DefaultMaxFileSizeSet.empty()) DefaultMaxFileSizeSet = "До 10 МБ";
+        }
+        if (FavoriteLanguages.empty()) {
+            FavoriteLanguages.push_back({"C#",         "//", "=;(){}[\\]<>?!."});
+            FavoriteLanguages.push_back({"C++",        "//", "=;(){}[\\]<>?!."});
+            FavoriteLanguages.push_back({"Python",     "#",  "=:(){}[\\]<>?!."});
+            FavoriteLanguages.push_back({"JavaScript", "//", "=;(){}[\\]<>?!."});
+            if (DefaultLanguage.empty()) DefaultLanguage = "C#";
+        }
+    }
+
     inline bool Load(const std::string& path = "settings.json") {
         std::ifstream in(path);
-        if (!in) { std::cerr << "Не найден " << path << ". Создан с дефолтами.\n"; Save(path); return true; }
+        if (!in) { std::cerr << "Не найден " << path << ". Создан с дефолтами.\n"; SetDefaults(); Save(path); return true; }
         json j;
         try { in >> j; } catch (const std::exception& e) { std::cerr << "Ошибка парсинга JSON: " << e.what() << "\n"; return false; }
         try {
@@ -120,6 +160,7 @@ namespace settings {
             }
             if (j.contains("default_language")) DefaultLanguage = j["default_language"];
         } catch (const std::exception& e) { std::cerr << "Ошибка чтения JSON: " << e.what() << "\n"; return false; }
+        SetDefaults();
         return true;
     }
 
@@ -184,6 +225,8 @@ namespace settings {
                 h.MaxCount = e.value("max_count", 0);
                 h.CommentType = e.value("comment_type", 1);
                 h.CommentWord = e.value("comment_word", "");
+                h.EmptyMetricValue = e.value("empty_metric", 1);
+                h.EmptyMaxCount    = e.value("empty_max_count", 0);
                 History.push_back(h);
             }
             MaxHistory = j.value("max", 20);
@@ -201,7 +244,8 @@ namespace settings {
                 {"structure_type", e.StructureType}, {"exclude", e.Exclude}, {"combination_type", e.CombinationType},
                 {"quantity_type", e.QuantityType}, {"number_compare", e.NumberCompareValue},
                 {"min_count", e.MinCount}, {"max_count", e.MaxCount},
-                {"comment_type", e.CommentType}, {"comment_word", e.CommentWord}
+                {"comment_type", e.CommentType}, {"comment_word", e.CommentWord},
+                {"empty_metric", e.EmptyMetricValue}, {"empty_max_count", e.EmptyMaxCount}
             });
         }
         j["history"] = arr;
@@ -255,6 +299,8 @@ namespace settings {
                 f.MaxCount = e.value("max_count", 0);
                 f.CommentType = e.value("comment_type", 1);
                 f.CommentWord = e.value("comment_word", "");
+                f.EmptyMetricValue = e.value("empty_metric", 1);
+                f.EmptyMaxCount    = e.value("empty_max_count", 0);
                 Favorites.push_back(f);
             }
             MaxFavorites = j.value("max", 50);
@@ -272,7 +318,8 @@ namespace settings {
                 {"structure_type", f.StructureType}, {"exclude", f.Exclude}, {"combination_type", f.CombinationType},
                 {"quantity_type", f.QuantityType}, {"number_compare", f.NumberCompareValue},
                 {"min_count", f.MinCount}, {"max_count", f.MaxCount},
-                {"comment_type", f.CommentType}, {"comment_word", f.CommentWord}
+                {"comment_type", f.CommentType}, {"comment_word", f.CommentWord},
+                {"empty_metric", f.EmptyMetricValue}, {"empty_max_count", f.EmptyMaxCount}
             });
         }
         j["favorites"] = arr;

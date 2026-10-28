@@ -239,6 +239,20 @@ namespace TestProject
         // А это ещё один
 
         public void Work()
+
+        for (){
+
+            
+        }
+        else {
+
+
+        }
+
+        if()
+        {
+
+        }
         public static void Work()
         {
             // внутренний комментарий

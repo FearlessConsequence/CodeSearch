@@ -43,6 +43,19 @@ namespace regex_builder {
         while ((pos = escaped.find(DOLLAR_PLACEHOLDER)) != std::string::npos) escaped.replace(pos, DOLLAR_PLACEHOLDER.length(), R"($)");
         return escaped;
     }
+    std::string EscapeXyzWithBounds(const std::string& s) {
+        std::string trimmed = s;
+        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.front())) trimmed.erase(trimmed.begin());
+        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.back()))  trimmed.pop_back();
+
+        std::string esc = EscapeXyz(s);
+        bool leftBound  = !trimmed.empty() && (std::isalnum((unsigned char)trimmed.front()) || trimmed.front() == '_');
+        bool rightBound = !trimmed.empty() && (std::isalnum((unsigned char)trimmed.back())  || trimmed.back()  == '_');
+        if (leftBound)  esc = R"(\b)" + esc;
+        if (rightBound) esc = esc + R"(\b)";
+        return esc;
+    }
+
 
     std::string WrapWord(const std::string& s) {
         std::string escaped = Escape(s);
@@ -81,21 +94,26 @@ namespace regex_builder {
         return word;
     }
 
-    static std::string BuildEmpty(const std::string& x) {
-        std::string lower = x;
-        for (auto& c : lower) c = std::tolower((unsigned char)c);
-        if (lower == "catch") return EscapeXyz(x) + R"(\s*(\([^)]*\))?\s*\{\s*\})";
-        return EscapeXyz(x) + R"(\s*\{\s*\})";
+    static std::string BuildEmpty(const SearchRequest& req) {
+        std::string metric;
+        switch (req.EmptyMetricValue) {
+            case EmptyMetric::StrictlyEmpty: metric = "строго пусто"; break;
+            case EmptyMetric::MaxChars:
+                metric = "≤ " + std::to_string(req.EmptyMaxCount) + " непроб. символов"; break;
+            case EmptyMetric::MaxLines:
+                metric = "≤ " + std::to_string(req.EmptyMaxCount) + " строк"; break;
+        }
+        return "[empty-block: " + req.X + ", " + metric + "]";
     }
 
     static std::string BuildStructure(const SearchRequest& req) {
         switch (req.Structure) {
             case StructureType::XEmpty:
-                return BuildEmpty(req.X);
+                return BuildEmpty(req);
             case StructureType::XAnywhereBeforeYBeforeZ:
-                return EscapeXyz(req.X) + "[\\s\\S]*?(" +
-                       EscapeXyz(req.Y) + ")[\\s\\S]*?" +
-                       EscapeXyz(req.Z);
+                return EscapeXyzWithBounds(req.X) + "[\\s\\S]*?(" +
+                       EscapeXyzWithBounds(req.Y) + ")[\\s\\S]*?" +
+                       EscapeXyzWithBounds(req.Z);
         }
         return "";
     }
@@ -103,7 +121,7 @@ namespace regex_builder {
     static std::string BuildCombination(const SearchRequest& req) {
         switch (req.Combination) {
             case CombinationType::XButNotY:
-                return EscapeXyz(req.X);
+                return EscapeXyzWithBounds(req.X);
             case CombinationType::XOrY: {
                 auto items = SplitByCommaWithQuotes(req.X);
                 std::string joined;
@@ -127,7 +145,9 @@ namespace regex_builder {
         switch (req.NumberCompareValue) {
             case NumberCompare::Equal:   return R"(\b\d{)" + std::to_string(req.MinCount) + R"(}\b)";
             case NumberCompare::Greater: return R"(\b\d{)" + std::to_string(req.MinCount + 1) + R"(,}\b)";
-            case NumberCompare::Less:    return R"(\b\d{1,)" + std::to_string(std::max(1, req.MinCount - 1)) + R"(}\b)";
+            case NumberCompare::Less:
+                if (req.MinCount <= 1) return R"((?!))";
+                return R"(\b\d{1,)" + std::to_string(req.MinCount - 1) + R"(}\b)";
             case NumberCompare::Between: return R"(\b\d{)" + std::to_string(req.MinCount) + "," + std::to_string(req.MaxCount) + R"(}\b)";
         }
         return "";
@@ -140,7 +160,9 @@ namespace regex_builder {
                 switch (req.NumberCompareValue) {
                     case NumberCompare::Greater: return "^.{" + std::to_string(req.MinCount + 1) + ",}$";
                     case NumberCompare::Equal:   return "^.{" + std::to_string(req.MinCount) + "}$";
-                    case NumberCompare::Less:    return "^.{1," + std::to_string(std::max(1, req.MinCount - 1)) + "}$";
+                    case NumberCompare::Less:
+                        if (req.MinCount <= 1) return R"((?!))";
+                        return "^.{1," + std::to_string(req.MinCount - 1) + "}$";
                     case NumberCompare::Between: return "^.{" + std::to_string(req.MinCount) + "," + std::to_string(req.MaxCount) + "}$";
                 }
                 return "";
@@ -151,7 +173,7 @@ namespace regex_builder {
 
     static std::string BuildTodo(const SearchRequest& req, const std::string& prefix) {
         if (!req.CommentWord.empty()) return prefix + R"(\s*)" + Escape(req.CommentWord) + ".*";
-        return prefix + R"(\s*(TODO|FIXME|HACK).*)";
+        return prefix + R"(\s*([Tt][Oo][Dd][Oo]|[Ff][Ii][Xx][Mm][Ee]|[Hh][Aa][Cc][Kk]).*)";
     }
 
     static std::string BuildCommentedCode(const SearchRequest& req, const std::string& prefix) {

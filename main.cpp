@@ -76,7 +76,10 @@ bool CopyAndRemember(const std::string& text, const std::string& source) {
 }
 
 void ShowResults(const std::vector<file_searcher::SearchResult>& results, const file_searcher::SearchOptions& options, int limit) {
-    if (results.empty()) return;
+    if (results.empty()) {
+        std::cout << colors::Dim << "(ничего не найдено)" << colors::Reset << "\n";
+        return;
+    }
     size_t shown = std::min((size_t)limit, results.size());
     for (size_t i = 0; i < shown; ++i) {
         std::string rel;
@@ -98,7 +101,7 @@ void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
     }
     int files = (int)uniqueFiles.size();
     int count = (int)results.size();
-    std::cout << colors::Totals << "Найдено файлов: " << files << colors::Reset << "\n";
+    std::cout << colors::Totals << "Найдено в файлах: " << files << colors::Reset << "\n";
     std::string color;
     if (count < 100) color = colors::Totals;
     else if (count < 500) color = colors::Warning;
@@ -108,12 +111,41 @@ void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
 
 static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
     switch (req.Type) {
-        case regex_builder::SearchType::Word: return "Слово: " + req.Word;
-        case regex_builder::SearchType::Format: return "Формат";
-        case regex_builder::SearchType::Structure: return "Структура: X=" + req.X + ", Y=" + req.Y;
-        case regex_builder::SearchType::Combination: return "Комбинирование";
-        case regex_builder::SearchType::Quantity: return "Количество";
-        case regex_builder::SearchType::Comment: return "Комментарии";
+        case regex_builder::SearchType::Word:
+            return "Слово: " + req.Word;
+        case regex_builder::SearchType::Format: {
+            static const char* n[] = { "", "Email", "URL", "IP", "GUID", "Дата" };
+                int i = (int)req.Format;
+                return std::string("Формат: ") + (i >= 1 && i <= 5 ? n[i] : "?");
+            }
+        case regex_builder::SearchType::Structure: {
+            if (req.Structure == regex_builder::StructureType::XEmpty) {
+                std::string metric;
+                switch (req.EmptyMetricValue) {
+                    case regex_builder::EmptyMetric::StrictlyEmpty:
+                        metric = "строго пусто"; break;
+                    case regex_builder::EmptyMetric::MaxChars:
+                        metric = "≤ " + std::to_string(req.EmptyMaxCount) + " непроб. символов"; break;
+                    case regex_builder::EmptyMetric::MaxLines:
+                        metric = "≤ " + std::to_string(req.EmptyMaxCount) + " строк"; break;
+                }
+                return "Структура: X=" + req.X + " (" + metric + ")";
+            }
+            return "Структура: X=" + req.X + ", Y=" + req.Y +
+                (req.Z.empty() ? "" : ", Z=" + req.Z);
+        }
+        
+        case regex_builder::SearchType::Combination:
+            return "Комбинирование: " + req.X + " / " + req.Y;
+        case regex_builder::SearchType::Quantity: {
+            static const char* q[] = { "", "Числа", "Длина строки", "Аргументы" };
+            int i = (int)req.Quantity;
+            return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") +
+                   " N=" + std::to_string(req.MinCount) +
+                   (req.MaxCount > 0 ? " M=" + std::to_string(req.MaxCount) : "");
+        }
+        case regex_builder::SearchType::Comment:
+            return "Комментарии" + (req.CommentWord.empty() ? "" : ": " + req.CommentWord);
     }
     return "";
 }
@@ -136,6 +168,8 @@ static void FillHistoryEntry(settings::HistoryEntry& h, const regex_builder::Sea
     h.MinCount = req.MinCount; h.MaxCount = req.MaxCount;
     h.CommentType = (int)req.Comment;
     h.CommentWord = req.CommentWord;
+    h.EmptyMetricValue = (int)req.EmptyMetricValue;
+    h.EmptyMaxCount    = req.EmptyMaxCount;
 }
 
 static void FillFavoriteEntry(settings::FavoriteEntry& f, const regex_builder::SearchRequest& req, const std::string& pattern, const std::string& name) {
@@ -157,6 +191,8 @@ static void FillFavoriteEntry(settings::FavoriteEntry& f, const regex_builder::S
     f.MinCount = req.MinCount; f.MaxCount = req.MaxCount;
     f.CommentType = (int)req.Comment;
     f.CommentWord = req.CommentWord;
+     f.EmptyMetricValue = (int)req.EmptyMetricValue;
+    f.EmptyMaxCount    = req.EmptyMaxCount;
 }
 
 static void RestoreRequest(regex_builder::SearchRequest& req, const settings::HistoryEntry& h) {
@@ -174,6 +210,8 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Hi
     req.MinCount = h.MinCount; req.MaxCount = h.MaxCount;
     req.Comment = (regex_builder::CommentType)h.CommentType;
     req.CommentWord = h.CommentWord;
+    req.EmptyMetricValue = (regex_builder::EmptyMetric)h.EmptyMetricValue;
+    req.EmptyMaxCount    = h.EmptyMaxCount;
 }
 
 static void RestoreRequest(regex_builder::SearchRequest& req, const settings::FavoriteEntry& f) {
@@ -191,6 +229,8 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Fa
     req.MinCount = f.MinCount; req.MaxCount = f.MaxCount;
     req.Comment = (regex_builder::CommentType)f.CommentType;
     req.CommentWord = f.CommentWord;
+    req.EmptyMetricValue = (regex_builder::EmptyMetric)f.EmptyMetricValue;
+    req.EmptyMaxCount    = f.EmptyMaxCount;
 }
 
 static void ShowHistoryList() {
@@ -268,7 +308,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
         if (choice == "1") { restart = true; }
         else if (choice == "2") {
             bool isArgsLength = (req.Type == regex_builder::SearchType::Quantity && req.Quantity == regex_builder::QuantityType::ArgsLength);
-            if (isArgsLength) std::cout << "(нечего копировать — специальный режим)\n\n";
+            bool isEmptyBlocks = (req.Type == regex_builder::SearchType::Structure && req.Structure == regex_builder::StructureType::XEmpty);
+            if (isArgsLength || isEmptyBlocks) std::cout << "(специальный режим — regex не используется)\n\n";
             else {
                 if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
                 else std::cout << "(буфер недоступен)\n";
