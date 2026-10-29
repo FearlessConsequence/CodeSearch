@@ -135,10 +135,20 @@ static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
                 (req.Z.empty() ? "" : ", Z=" + req.Z);
         }
         
-        case regex_builder::SearchType::Combination:
+        case regex_builder::SearchType::Combination: {
+            if (req.Combination == regex_builder::CombinationType::XButNotY) {
+                std::string mode;
+                switch (req.XButNotYModeValue) {
+                    case regex_builder::XButNotYMode::ByPosition: mode = "по позиции"; break;
+                    case regex_builder::XButNotYMode::ByLine:     mode = "по строке"; break;
+                }
+                return "Комбинирование: " + req.X + " но не " + req.Y + " (" + mode + ")";
+            }
             return "Комбинирование: " + req.X + " / " + req.Y;
+        }
+
         case regex_builder::SearchType::Quantity: {
-            static const char* q[] = { "", "Числа", "Длина строки", "Аргументы" };
+            static const char* q[] = { "", "цифр в числе", "Длина строки", "Аргументы" };
             int i = (int)req.Quantity;
             return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") +
                    " N=" + std::to_string(req.MinCount) +
@@ -163,6 +173,7 @@ static void FillHistoryEntry(settings::HistoryEntry& h, const regex_builder::Sea
     h.StructureType = (int)req.Structure;
     h.Exclude = req.Exclude;
     h.CombinationType = (int)req.Combination;
+    h.XButNotYModeValue = (int)req.XButNotYModeValue;
     h.QuantityType = (int)req.Quantity;
     h.NumberCompareValue = (int)req.NumberCompareValue;
     h.MinCount = req.MinCount; h.MaxCount = req.MaxCount;
@@ -186,6 +197,7 @@ static void FillFavoriteEntry(settings::FavoriteEntry& f, const regex_builder::S
     f.StructureType = (int)req.Structure;
     f.Exclude = req.Exclude;
     f.CombinationType = (int)req.Combination;
+    f.XButNotYModeValue = (int)req.XButNotYModeValue;
     f.QuantityType = (int)req.Quantity;
     f.NumberCompareValue = (int)req.NumberCompareValue;
     f.MinCount = req.MinCount; f.MaxCount = req.MaxCount;
@@ -205,6 +217,7 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Hi
     req.Structure = (regex_builder::StructureType)h.StructureType;
     req.Exclude = h.Exclude;
     req.Combination = (regex_builder::CombinationType)h.CombinationType;
+    req.XButNotYModeValue = (regex_builder::XButNotYMode)h.XButNotYModeValue;
     req.Quantity = (regex_builder::QuantityType)h.QuantityType;
     req.NumberCompareValue = (regex_builder::NumberCompare)h.NumberCompareValue;
     req.MinCount = h.MinCount; req.MaxCount = h.MaxCount;
@@ -224,6 +237,7 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Fa
     req.Structure = (regex_builder::StructureType)f.StructureType;
     req.Exclude = f.Exclude;
     req.Combination = (regex_builder::CombinationType)f.CombinationType;
+    req.XButNotYModeValue = (regex_builder::XButNotYMode)f.XButNotYModeValue;
     req.Quantity = (regex_builder::QuantityType)f.QuantityType;
     req.NumberCompareValue = (regex_builder::NumberCompare)f.NumberCompareValue;
     req.MinCount = f.MinCount; req.MaxCount = f.MaxCount;
@@ -309,7 +323,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
         else if (choice == "2") {
             bool isArgsLength = (req.Type == regex_builder::SearchType::Quantity && req.Quantity == regex_builder::QuantityType::ArgsLength);
             bool isEmptyBlocks = (req.Type == regex_builder::SearchType::Structure && req.Structure == regex_builder::StructureType::XEmpty);
-            if (isArgsLength || isEmptyBlocks) std::cout << "(специальный режим — regex не используется)\n\n";
+            bool isXButNotY = (req.Type == regex_builder::SearchType::Combination && req.Combination == regex_builder::CombinationType::XButNotY);
+            if (isArgsLength || isEmptyBlocks || isXButNotY) std::cout << "(специальный режим — regex не используется)\n\n";
             else {
                 if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
                 else std::cout << "(буфер недоступен)\n";

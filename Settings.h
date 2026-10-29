@@ -27,6 +27,7 @@ namespace settings {
         int StructureType = 1;
         std::string Exclude;
         int CombinationType = 1;
+        int XButNotYModeValue = 1;
         int QuantityType = 1;
         int NumberCompareValue = 1;
         int MinCount = 0, MaxCount = 0;
@@ -49,6 +50,7 @@ namespace settings {
         int StructureType = 1;
         std::string Exclude;
         int CombinationType = 1;
+        int XButNotYModeValue = 1;
         int QuantityType = 1;
         int NumberCompareValue = 1;
         int MinCount = 0, MaxCount = 0;
@@ -219,6 +221,7 @@ namespace settings {
                 h.StructureType = e.value("structure_type", 1);
                 h.Exclude = e.value("exclude", "");
                 h.CombinationType = e.value("combination_type", 1);
+                h.XButNotYModeValue = e.value("x_not_y_mode", 1);
                 h.QuantityType = e.value("quantity_type", 1);
                 h.NumberCompareValue = e.value("number_compare", 1);
                 h.MinCount = e.value("min_count", 0);
@@ -242,6 +245,7 @@ namespace settings {
                 {"req_type", e.ReqType}, {"word", e.Word}, {"word_whole", e.WordWholeOnly},
                 {"format_type", e.FormatType}, {"x", e.X}, {"y", e.Y}, {"z", e.Z},
                 {"structure_type", e.StructureType}, {"exclude", e.Exclude}, {"combination_type", e.CombinationType},
+                {"x_not_y_mode", e.XButNotYModeValue},
                 {"quantity_type", e.QuantityType}, {"number_compare", e.NumberCompareValue},
                 {"min_count", e.MinCount}, {"max_count", e.MaxCount},
                 {"comment_type", e.CommentType}, {"comment_word", e.CommentWord},
@@ -293,6 +297,7 @@ namespace settings {
                 f.StructureType = e.value("structure_type", 1);
                 f.Exclude = e.value("exclude", "");
                 f.CombinationType = e.value("combination_type", 1);
+                f.XButNotYModeValue = e.value("x_not_y_mode", 1);
                 f.QuantityType = e.value("quantity_type", 1);
                 f.NumberCompareValue = e.value("number_compare", 1);
                 f.MinCount = e.value("min_count", 0);
@@ -316,6 +321,7 @@ namespace settings {
                 {"req_type", f.ReqType}, {"word", f.Word}, {"word_whole", f.WordWholeOnly},
                 {"format_type", f.FormatType}, {"x", f.X}, {"y", f.Y}, {"z", f.Z},
                 {"structure_type", f.StructureType}, {"exclude", f.Exclude}, {"combination_type", f.CombinationType},
+                {"x_not_y_mode", f.XButNotYModeValue},
                 {"quantity_type", f.QuantityType}, {"number_compare", f.NumberCompareValue},
                 {"min_count", f.MinCount}, {"max_count", f.MaxCount},
                 {"comment_type", f.CommentType}, {"comment_word", f.CommentWord},

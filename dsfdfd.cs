@@ -81,16 +81,19 @@ namespace TestProject
         {
             try
             {
+                catch
             }
             catch { }                                  // ← пустой catch
 
             try
             {
+                catch
             }
-            catch (Exception) { }                      // ← пустой catch с Exception
+            catch (Exception) { } 
 
             try
             {
+                
             }
             catch (Exception ex)
             {

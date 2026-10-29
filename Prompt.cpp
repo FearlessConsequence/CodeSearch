@@ -220,7 +220,7 @@ namespace prompt {
                               << " Если элемент содержит запятую — возьмите его в кавычки \"...\" или '...')"
                               << colors::Reset << "\n";
                     req.X = ReadLine("Элементы через запятую (0 — назад): ");
-                    if (GoBack) continue;
+                    if (GoBack) break;
                     if (!QuotesBalanced(req.X)) {
                         std::cout << colors::Error << "Кавычки не закрыты. Попробуйте снова." << colors::Reset << "\n";
                         continue;
@@ -235,22 +235,36 @@ namespace prompt {
                     }
                     return true;
                 }
+                if (GoBack) continue;
             }
             else {
+                bool backToTop = false;
                 while (true) {
+                    std::cout << "Как сравнивать X и Y?\n";
+                    std::cout << "  1. X не является частью Y (по позиции)\n";
+                    std::cout << "  2. В строке с X нет Y (по строке)\n";
+                    std::cout << "  0. Назад\n> ";
+                    req.XButNotYModeValue = (regex_builder::XButNotYMode)ReadInt(1, 2);
+                    if (GoBack) { backToTop = true; break; }
+
                     std::cout << colors::Dim
                               << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                               << " ^ — начало строки, $ — конец строки)"
                               << colors::Reset << "\n";
-                    req.X = ReadLine("X (0 — назад): ");
-                    if (GoBack) continue;
-                    req.Y = ReadLine("Y (0 — назад): ");
-                    if (GoBack) continue;
-                    if (req.X.empty()) { std::cout << colors::Error << "X пуст." << colors::Reset << "\n"; continue; }
-                    if (req.Y.empty()) { std::cout << colors::Error << "Y пуст." << colors::Reset << "\n"; continue; }
-                    req.Exclude = req.Y;
-                    return true;
+                    bool backToSub = false;
+                    while (true) {
+                        req.X = ReadLine("X (0 — назад): ");
+                        if (GoBack) { backToSub = true; break; }
+                        req.Y = ReadLine("Y (0 — назад): ");
+                        if (GoBack) { backToSub = true; break; }
+                        if (req.X.empty()) { std::cout << colors::Error << "X пуст." << colors::Reset << "\n"; continue; }
+                        if (req.Y.empty()) { std::cout << colors::Error << "Y пуст." << colors::Reset << "\n"; continue; }
+                        req.Exclude = req.Y;
+                        return true;
+                    }
+                    if (backToSub) continue;
                 }
+                if (backToTop) continue;
             }
         }
     }
@@ -260,7 +274,7 @@ namespace prompt {
     static bool AskQuantity(regex_builder::SearchRequest& req) {
         while (true) {
             std::cout << "Что ограничить?\n";
-            std::cout << "  1. Числа\n";
+            std::cout << "  1. Количество цифр в числе\n";
             std::cout << "  2. Длина строки\n";
             std::cout << "  3. Длина списка аргументов\n";
             std::cout << "  0. Назад\n> ";
@@ -285,7 +299,7 @@ namespace prompt {
                 if (GoBack) continue;
             }
             else {
-                std::cout << "Количество (0 — назад): ";
+                std::cout << "Сколько цифр (0 — назад): ";
                 req.MinCount = ReadInt(1, 10000);
                 if (GoBack) continue;
             }

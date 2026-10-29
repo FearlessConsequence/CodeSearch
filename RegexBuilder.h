@@ -25,6 +25,11 @@ namespace regex_builder {
         XAnywhereBeforeYBeforeZ = 2
     };
 
+    enum class XButNotYMode {
+        ByPosition = 1,
+        ByLine = 2,
+    };
+
     enum class CombinationType {
         XButNotY = 1,
         XOrY = 2
@@ -71,6 +76,7 @@ namespace regex_builder {
         // Тип 4
         std::string Exclude;
         CombinationType Combination = CombinationType::XButNotY;
+        XButNotYMode XButNotYModeValue = XButNotYMode::ByPosition;
 
         // Тип 5
         QuantityType Quantity = QuantityType::Numbers;

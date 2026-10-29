@@ -181,8 +181,7 @@ namespace file_searcher {
             for (auto& yr : yRanges) if (xs < yr.second && xe > yr.first) { intersects = true; break; }
             if (intersects) continue;
             int line = lines.At(xs);
-            std::string text = TrimmedLineAt(content, xs);
-            results.push_back({file, line, text});
+            results.push_back({file, line, it->str()});
         }
     }
 
@@ -499,6 +498,45 @@ namespace file_searcher {
         }
     }
 
+    static void SearchXButNotYByLine(const fs::path& file,
+                                     const regex_builder::SearchRequest& req,
+                                     std::vector<SearchResult>& results) {
+        std::string content = ReadFile(file);
+        if (content.empty()) return;
+
+        std::regex rxX, rxY;
+        try {
+            rxX = std::regex(regex_builder::EscapeXyzWithBounds(req.X));
+            rxY = std::regex(regex_builder::EscapeXyzWithBounds(req.Y));
+        } catch (...) { return; }
+
+        auto skipMask = BuildSkipMask(content);
+        LineTracker lines{content};
+
+        for (auto it = std::sregex_iterator(content.begin(), content.end(), rxX);
+             it != std::sregex_iterator(); ++it) {
+            size_t xPos = (size_t)it->position();
+
+            size_t lineStart = content.rfind('\n', xPos);
+            lineStart = (lineStart == std::string::npos) ? 0 : lineStart + 1;
+            size_t lineEnd = content.find('\n', xPos);
+            if (lineEnd == std::string::npos) lineEnd = content.size();
+
+            std::string cleanLine;
+            cleanLine.reserve(lineEnd - lineStart);
+            for (size_t k = lineStart; k < lineEnd; ++k) {
+                if (!skipMask[k]) cleanLine += content[k];
+            }
+
+            std::smatch m;
+            if (std::regex_search(cleanLine, m, rxY)) continue;
+
+            int lineNum = lines.At(xPos);
+            results.push_back({file, lineNum, it->str()});
+        }
+    }
+
+
     std::vector<SearchResult> Search(const regex_builder::SearchRequest& req, const std::string& pattern, const SearchOptions& options) {
         std::vector<SearchResult> results;
         auto files = EnumerateFiles(options);
@@ -521,10 +559,13 @@ namespace file_searcher {
         bool needWholeRx = isCombinationXOrY || isStructureXYZ || isCombinationXButNotY;
 
         try {
-            if (needLineRx)  lineRx  = std::regex(pattern);
-            if (needWholeRx) wholeRx = std::regex(pattern, std::regex::multiline);
-            if (isCombinationXButNotY)
+            if (isCombinationXButNotY && req.XButNotYModeValue == regex_builder::XButNotYMode::ByPosition) {
+                wholeRx = std::regex(regex_builder::EscapeXyzWithBounds(req.X), std::regex::multiline);
                 yRx = std::regex(regex_builder::EscapeXyzWithBounds(req.Y), std::regex::multiline);
+            } else if (!isCombinationXButNotY) {
+                if (needLineRx)  lineRx  = std::regex(pattern);
+                if (needWholeRx) wholeRx = std::regex(pattern, std::regex::multiline);
+            }
         } catch (const std::regex_error& e) {
             std::cerr << colors::Error << "Ошибка в regex: " << e.what() << colors::Reset << "\n";
             return results;
@@ -549,8 +590,12 @@ namespace file_searcher {
                         SearchEmptyBlocks(files[i], req, local);
                     else if (isCombinationXOrY)
                         SearchWholeFile(files[i], wholeRx, local);
-                    else if (isCombinationXButNotY)
-                        SearchXButNotY(files[i], wholeRx, yRx, local);
+                    else if (isCombinationXButNotY) {
+                        if (req.XButNotYModeValue == regex_builder::XButNotYMode::ByLine)
+                            SearchXButNotYByLine(files[i], req, local);
+                        else
+                            SearchXButNotY(files[i], wholeRx, yRx, local);
+                    }
                     else if (isArgsLength)
                         SearchArgsLength(files[i], req, local);
                     else

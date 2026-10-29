@@ -120,8 +120,14 @@ namespace regex_builder {
 
     static std::string BuildCombination(const SearchRequest& req) {
         switch (req.Combination) {
-            case CombinationType::XButNotY:
-                return EscapeXyzWithBounds(req.X);
+            case CombinationType::XButNotY: {
+                std::string mode;
+                switch (req.XButNotYModeValue) {
+                    case XButNotYMode::ByPosition: mode = "по позиции"; break;
+                    case XButNotYMode::ByLine:     mode = "по строке"; break;
+                }
+                return "[X но не Y (" + mode + "): " + req.X + " / " + req.Y + "]";
+            }
             case CombinationType::XOrY: {
                 auto items = SplitByCommaWithQuotes(req.X);
                 std::string joined;
