@@ -58,6 +58,14 @@ namespace prompt {
         if (start == std::string::npos) return "";
         std::string trimmed = input.substr(start, end - start + 1);
 
+        // Если ввели что-то в кавычках — это буквальный текст (например, "0")
+        if (trimmed.length() >= 2) {
+            if ((trimmed.front() == '"' && trimmed.back() == '"') ||
+                (trimmed.front() == '\'' && trimmed.back() == '\'')) {
+                return trimmed.substr(1, trimmed.length() - 2);
+            }
+        }
+
         if (trimmed == "0") {
             GoBack = true;
             return "";
@@ -227,7 +235,7 @@ namespace prompt {
                     }
                     bool hasItem = false;
                     for (char c : req.X) {
-                        if (!std::isspace((unsigned char)c) && c != ',') { hasItem = true; break; }
+                        if (!std::isspace((unsigned char)c) && c != ',' && c != '"' && c != '\'') { hasItem = true; break; }
                     }
                     if (!hasItem) {
                         std::cout << colors::Error << "Нужен хотя бы один элемент." << colors::Reset << "\n";
@@ -241,7 +249,7 @@ namespace prompt {
                 bool backToTop = false;
                 while (true) {
                     std::cout << "Как сравнивать X и Y?\n";
-                    std::cout << "  1. X не является частью Y (по позиции)\n";
+                    std::cout << "  1. X не пересекается с Y (по позиции)\n";
                     std::cout << "  2. В строке с X нет Y (по строке)\n";
                     std::cout << "  0. Назад\n> ";
                     req.XButNotYModeValue = (regex_builder::XButNotYMode)ReadInt(1, 2);
@@ -310,21 +318,32 @@ namespace prompt {
     // ============ ТИП 6 ============
 
     static bool AskComment(regex_builder::SearchRequest& req) {
-        req.Language = settings::DefaultLanguage;
-
-        std::cout << "Что искать?\n";
-        std::cout << "  1. TODO / FIXME / HACK\n";
-        std::cout << "  2. Комментарий в начале строки\n";
-        std::cout << "  3. Комментарий в конце строки\n";
-        std::cout << "  4. Закомментированный код\n";
+        std::cout << "Что искать в комментариях?\n";
+        std::cout << "  1. В начале строки\n";
+        std::cout << "  2. В конце строки\n";
+        std::cout << "  3. Все комментарии\n";
         std::cout << "  0. Назад\n> ";
-        req.Comment = (regex_builder::CommentType)ReadInt(1, 4);
+        req.Comment = (regex_builder::CommentType)ReadInt(1, 3);
         if (GoBack) return false;
 
-        if (req.Comment == regex_builder::CommentType::Todo) {
-            req.CommentWord = ReadLine("Слово (Enter — TODO/FIXME/HACK, 0 — назад): ");
-            if (GoBack) return false;
+        // Выбор языка
+        if (settings::FavoriteLanguages.empty()) {
+            std::cout << colors::Error << "Нет доступных языков в настройках." << colors::Reset << "\n";
+            return false;
         }
+        std::cout << "\nВыберите язык:\n";
+        for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
+            const auto& l = settings::FavoriteLanguages[i];
+            std::cout << "  " << (i + 1) << ". " << l.Name << " (" << l.Prefix << ")\n";
+        }
+        std::cout << "  0. Назад\n> ";
+        int langIdx = ReadInt(1, (int)settings::FavoriteLanguages.size());
+        if (GoBack) return false;
+        req.Language = settings::FavoriteLanguages[langIdx - 1].Name;
+
+        // Слово (пустое = все комментарии этого типа)
+        req.CommentWord = ReadLine("Слово для поиска (Enter — все комментарии, 0 — назад): ");
+        if (GoBack) return false;
         return true;
     }
 
@@ -848,8 +867,7 @@ namespace prompt {
             if (printMenu) {
                 std::cout << "\n=== ВЫВОД ===\n\n";
                 std::cout << "  1. Показывать первых: " << settings::ShowFirstN << "\n";
-                std::cout << "  2. Цветной: " << (settings::ColoredOutput ? "да" : "нет") << "\n";
-                std::cout << "  3. Файл результатов: " << settings::ResultsFile << "\n";
+                std::cout << "  2. Файл результатов: " << settings::ResultsFile << "\n";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -865,7 +883,7 @@ namespace prompt {
 
             int n = -1;
             try { n = std::stoi(input); } catch (...) { continue; }
-            if (n < 0 || n > 3) continue;
+            if (n < 0 || n > 2) continue;
 
             if (n == 0) return;
             printMenu = true;
@@ -878,10 +896,6 @@ namespace prompt {
                 std::cout << "\nУстановлено.\n\n";
             }
             else if (n == 2) {
-                settings::ColoredOutput = !settings::ColoredOutput;
-                std::cout << "\nИзменено.\n\n";
-            }
-            else if (n == 3) {
                 auto v = ReadLine("Имя файла (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::ResultsFile = v;
@@ -1041,7 +1055,7 @@ namespace prompt {
     }
 
     bool AskSearchOptions(file_searcher::SearchOptions& opt,
-                        const regex_builder::SearchRequest& req) {
+                        regex_builder::SearchRequest& req) {
         opt.Directory = fs::current_path();
 
         if (req.Type == regex_builder::SearchType::Comment) {
@@ -1081,6 +1095,8 @@ namespace prompt {
                 std::cout << "  6. Максимальный размер: "
                     << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ")
                     << "\n";
+                if (req.Type == regex_builder::SearchType::Comment)
+                    std::cout << "  7. Язык: " << req.Language << "\n";
                 std::cout << "  0. Отмена\n> ";
                 printMenu = false;
             } else {
@@ -1098,7 +1114,8 @@ namespace prompt {
             if (choice == "1") return true;
 
             bool valid = (choice == "2" || choice == "3" || choice == "4" ||
-                          choice == "5" || choice == "6");
+                        choice == "5" || choice == "6");
+            if (req.Type == regex_builder::SearchType::Comment && choice == "7") valid = true;
             if (!valid) continue;
 
             printMenu = true;
@@ -1106,14 +1123,19 @@ namespace prompt {
             if (choice == "2") {
                 auto dir = ReadLine("Директория (Enter — текущая, 0 — назад): ");
                 if (GoBack) { GoBack = false; printMenu = true; continue; }
-                if (!dir.empty()) {
-                    fs::path dirPath = fs::u8path(dir);
+                
+                if (dir.empty()) {
+                    // Если нажали Enter — сбрасываем на текущую директорию
+                    opt.Directory = fs::current_path();
+                } else {
+                    fs::path dirPath = utf8::FromUtf8(dir);
                     if (fs::exists(dirPath) && fs::is_directory(dirPath))
                         opt.Directory = dirPath;
                     else
                         std::cout << colors::Error << "Директория не найдена: " << dir << colors::Reset << "\n";
                 }
             }
+
             else if (choice == "3") {
                 if (!settings::ExtensionSets.empty()) {
                     std::cout << "\nВыберите сет расширений:\n";
@@ -1166,6 +1188,22 @@ namespace prompt {
                 std::cout << "Максимум МБ (-1 — без лимита, 0 — 0 МБ): ";
                 int mb = ReadInt(-1, 10000);
                 opt.MaxFileSizeMb = mb;
+            }
+
+            else if (choice == "7" && req.Type == regex_builder::SearchType::Comment) {
+                std::cout << "\nВыберите язык:\n";
+                for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
+                    const auto& l = settings::FavoriteLanguages[i];
+                    std::cout << "  " << (i + 1) << ". " << l.Name << " (" << l.Prefix << ")\n";
+                }
+                std::cout << "  0. Отмена\n> ";
+                int langIdx = ReadInt(0, (int)settings::FavoriteLanguages.size());
+                if (langIdx > 0) {
+                    req.Language = settings::FavoriteLanguages[langIdx - 1].Name;
+                    auto extIt = settings::ExtensionSets.find(req.Language);
+                    if (extIt != settings::ExtensionSets.end())
+                        opt.Extensions = extIt->second;
+                }
             }
         }
     }

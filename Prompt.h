@@ -13,7 +13,7 @@ namespace prompt {
     
     regex_builder::SearchRequest Run();
     bool AskSearchOptions(file_searcher::SearchOptions& options,
-                          const regex_builder::SearchRequest& req);
+                        regex_builder::SearchRequest& req);
 
     void EditSettings();
 

@@ -21,10 +21,14 @@ namespace file_searcher {
         fs::path File;
         int Line = 0;
         std::string Text;
+        std::string Kind;
+        int MatchCount = 1;
     };
 
     std::vector<SearchResult> Search(
         const regex_builder::SearchRequest& req,
         const std::string& pattern,
-        const SearchOptions& options);
+        const SearchOptions& options,
+        size_t* outFileCount = nullptr,
+        size_t* outSkippedCount = nullptr);
 }

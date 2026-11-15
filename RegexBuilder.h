@@ -6,12 +6,12 @@
 namespace regex_builder {
 
     enum class SearchType {
-        Word = 1,
-        Format = 2,
-        Structure = 3,
-        Combination = 4,
-        Quantity = 5,
-        Comment = 6
+        Structure = 1,
+        Combination = 2,
+        Quantity = 3,
+        Format = 4,
+        Comment = 5,
+        Word = 6
     };
 
     enum class EmptyMetric {
@@ -49,10 +49,9 @@ namespace regex_builder {
     };
 
     enum class CommentType {
-        Todo = 1,
-        StartLine = 2,
-        EndLine = 3,
-        CommentedCode = 4
+        StartLine = 1,
+        EndLine = 2,
+        CommentedCode = 3
     };
 
     struct SearchRequest {
@@ -85,9 +84,8 @@ namespace regex_builder {
         int MaxCount = 0;
 
         // Тип 6
-        CommentType Comment = CommentType::Todo;
+        CommentType Comment = CommentType::StartLine;
         std::string CommentWord;
-        std::vector<std::string> CommentedCodeWords;
     };
 
     std::string Build(const SearchRequest& req);

@@ -23,13 +23,9 @@ namespace regex_builder {
     }
 
     std::string EscapeXyz(const std::string& s) {
-        std::string trimmed = s;
-        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.front())) trimmed.erase(trimmed.begin());
-        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.back())) trimmed.pop_back();
-        if (trimmed == "}") return R"(^\s*\})";
-
         std::string temp = s;
         size_t pos;
+
         while ((pos = temp.find('%')) != std::string::npos) temp.replace(pos, 1, PERCENT_PLACEHOLDER);
         while ((pos = temp.find('*')) != std::string::npos) temp.replace(pos, 1, STAR_PLACEHOLDER);
         while ((pos = temp.find('^')) != std::string::npos) temp.replace(pos, 1, CARET_PLACEHOLDER);
@@ -44,13 +40,35 @@ namespace regex_builder {
         return escaped;
     }
     std::string EscapeXyzWithBounds(const std::string& s) {
-        std::string trimmed = s;
-        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.front())) trimmed.erase(trimmed.begin());
-        while (!trimmed.empty() && std::isspace((unsigned char)trimmed.back()))  trimmed.pop_back();
+        size_t a = s.find_first_not_of(" \t\r\n");
+        if (a == std::string::npos) return "";
+        size_t b = s.find_last_not_of(" \t\r\n");
+        std::string trimmed = s.substr(a, b - a + 1);
 
-        std::string esc = EscapeXyz(s);
-        bool leftBound  = !trimmed.empty() && (std::isalnum((unsigned char)trimmed.front()) || trimmed.front() == '_');
-        bool rightBound = !trimmed.empty() && (std::isalnum((unsigned char)trimmed.back())  || trimmed.back()  == '_');
+        std::string esc = EscapeXyz(trimmed);
+
+        // B2: если % на границе, а следующий/предыдущий значимый символ — словесный,
+        // вставляем \b после/перед всеми \s* от ведущих/хвостовых %, чтобы граница
+        // слова сохранялась даже при пустом матче \s*.
+        if (trimmed.front() == '%') {
+            size_t k = 0;
+            while (k < trimmed.size() && trimmed[k] == '%') ++k;
+            if (k < trimmed.size() &&
+                (std::isalnum((unsigned char)trimmed[k]) || trimmed[k] == '_'))
+                esc.insert(k * 3, R"(\b)");  // "\\s*" = 3 символа
+        }
+        if (trimmed.back() == '%') {
+            size_t k = 0;
+            while (k < trimmed.size() && trimmed[trimmed.size() - 1 - k] == '%') ++k;
+            if (k < trimmed.size()) {
+                char prev = trimmed[trimmed.size() - 1 - k];
+                if (std::isalnum((unsigned char)prev) || prev == '_')
+                    esc.insert(esc.size() - k * 3, R"(\b)");
+            }
+        }
+
+        bool leftBound  = std::isalnum((unsigned char)trimmed.front()) || trimmed.front() == '_';
+        bool rightBound = std::isalnum((unsigned char)trimmed.back())  || trimmed.back()  == '_';
         if (leftBound)  esc = R"(\b)" + esc;
         if (rightBound) esc = esc + R"(\b)";
         return esc;
@@ -90,7 +108,15 @@ namespace regex_builder {
 
     static std::string BuildWord(const SearchRequest& req) {
         std::string word = Escape(req.Word);
-        if (req.WordWholeOnly) return R"(\b)" + word + R"(\b)";
+        if (!req.WordWholeOnly) return word;
+
+        bool leftBound  = !req.Word.empty() &&
+                        (std::isalnum((unsigned char)req.Word.front()) || req.Word.front() == '_');
+        bool rightBound = !req.Word.empty() &&
+                        (std::isalnum((unsigned char)req.Word.back())  || req.Word.back()  == '_');
+
+        if (leftBound)  word = R"(\b)" + word;
+        if (rightBound) word = word + R"(\b)";
         return word;
     }
 
@@ -110,10 +136,13 @@ namespace regex_builder {
         switch (req.Structure) {
             case StructureType::XEmpty:
                 return BuildEmpty(req);
-            case StructureType::XAnywhereBeforeYBeforeZ:
-                return EscapeXyzWithBounds(req.X) + "[\\s\\S]*?(" +
-                       EscapeXyzWithBounds(req.Y) + ")[\\s\\S]*?" +
-                       EscapeXyzWithBounds(req.Z);
+            case StructureType::XAnywhereBeforeYBeforeZ: {
+                std::string x = EscapeXyzWithBounds(req.X);
+                std::string y = EscapeXyzWithBounds(req.Y);
+                std::string z = EscapeXyzWithBounds(req.Z);
+                if (x.empty() || y.empty() || z.empty()) return "";
+                return x + "[\\s\\S]*?(" + y + ")[\\s\\S]*?" + z;
+            }
         }
         return "";
     }
@@ -182,27 +211,15 @@ namespace regex_builder {
         return prefix + R"(\s*([Tt][Oo][Dd][Oo]|[Ff][Ii][Xx][Mm][Ee]|[Hh][Aa][Cc][Kk]).*)";
     }
 
-    static std::string BuildCommentedCode(const SearchRequest& req, const std::string& prefix) {
-        auto lang = settings::GetLanguage(req.Language);
-        if (!req.CommentedCodeWords.empty()) {
-            std::string lookaheads;
-            for (const auto& w : req.CommentedCodeWords) lookaheads += "(?=.*" + WrapWord(w) + ")";
-            return R"(^\s*)" + prefix + R"(\s*)" + lookaheads + ".*";
-        }
-        return R"(^\s*)" + prefix + R"(\s*(?!(TODO|FIXME|HACK|NOTE)\b).*[)" + lang.Signs + R"(])";
-    }
-
     static std::string BuildComment(const SearchRequest& req) {
-        auto lang = settings::GetLanguage(req.Language);
-        std::string prefix = lang.Prefix;
-        std::string firstChar = prefix.substr(0, 1);
+        std::string mode;
         switch (req.Comment) {
-            case CommentType::Todo:          return BuildTodo(req, prefix);
-            case CommentType::StartLine:     return R"(^\s*)" + prefix + ".*";
-            case CommentType::EndLine:       return R"(^\s*[^)" + firstChar + R"(\s].*)" + prefix + ".*";
-            case CommentType::CommentedCode: return BuildCommentedCode(req, prefix);
+            case CommentType::StartLine:     mode = "в начале строки"; break;
+            case CommentType::EndLine:       mode = "в конце строки";  break;
+            case CommentType::CommentedCode: mode = "все комментарии"; break;
         }
-        return "";
+        std::string word = req.CommentWord.empty() ? "(все)" : req.CommentWord;
+        return "[comments: " + mode + ", язык: " + req.Language + ", слово: " + word + "]";
     }
 
     std::string Build(const SearchRequest& req) {

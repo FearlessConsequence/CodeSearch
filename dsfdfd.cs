@@ -132,7 +132,7 @@ namespace TestProject
             if (true)
             {
             }
-        }
+        } 
 
         public void Method2()
         {

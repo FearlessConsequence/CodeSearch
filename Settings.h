@@ -1,3 +1,5 @@
+
+#include "Colors.h"
 #pragma once
 #include <string>
 #include <vector>
@@ -38,7 +40,7 @@ namespace settings {
     };
 
     inline std::vector<HistoryEntry> History;
-    inline int MaxHistory = 20;
+    inline int MaxHistory = 100;
 
     struct FavoriteEntry {
         std::string Name, Type, Language, Pattern, Description;
@@ -84,7 +86,6 @@ namespace settings {
     inline int FallbackMaxFileSizeMb = 200;
 
     inline int ShowFirstN = 50;
-    inline bool ColoredOutput = true;
     inline std::string ResultsFile = "search_results.txt";
 
     inline std::vector<LanguageInfo> FavoriteLanguages;
@@ -129,8 +130,18 @@ namespace settings {
     inline bool Load(const std::string& path = "settings.json") {
         std::ifstream in(path);
         if (!in) { std::cerr << "Не найден " << path << ". Создан с дефолтами.\n"; SetDefaults(); Save(path); return true; }
+        
         json j;
-        try { in >> j; } catch (const std::exception& e) { std::cerr << "Ошибка парсинга JSON: " << e.what() << "\n"; return false; }
+        try { 
+            in >> j; 
+        } catch (const json::parse_error& e) { 
+            std::cerr << "Файл настроек поврежден. Сброс на настройки по умолчанию.\n";
+            SetDefaults(); 
+            return true; // Возвращаем true, чтобы программа не падала и работала с дефолтами
+        } catch (const std::exception& e) { 
+            std::cerr << "Ошибка чтения: " << e.what() << "\n"; 
+            return false; 
+        }
         try {
             if (j.contains("extension_sets")) { ExtensionSets.clear(); for (auto& [k, v] : j["extension_sets"].items()) ExtensionSets[k] = v.get<std::vector<std::string>>(); }
             if (j.contains("default_extension_set")) DefaultExtensionSet = j["default_extension_set"];
@@ -147,7 +158,6 @@ namespace settings {
             if (j.contains("output")) {
                 auto& out = j["output"];
                 if (out.contains("show_first_n")) ShowFirstN = out["show_first_n"];
-                if (out.contains("colored_output")) ColoredOutput = out["colored_output"];
                 if (out.contains("results_file")) ResultsFile = out["results_file"];
             }
             if (j.contains("favorite_languages")) {
@@ -188,7 +198,7 @@ namespace settings {
         j["max_file_size_sets"] = MaxFileSizeSets;
         j["default_max_file_size_set"] = DefaultMaxFileSizeSet;
         j["fallback_max_file_size_mb"] = FallbackMaxFileSizeMb;
-        j["output"] = { {"show_first_n", ShowFirstN}, {"colored_output", ColoredOutput}, {"results_file", ResultsFile} };
+        j["output"] = { {"show_first_n", ShowFirstN}, {"results_file", ResultsFile} };
         json langs = json::array();
         for (const auto& l : FavoriteLanguages) langs.push_back({ {"name", l.Name}, {"prefix", l.Prefix}, {"signs", l.Signs} });
         j["favorite_languages"] = langs;
@@ -227,6 +237,7 @@ namespace settings {
                 h.MinCount = e.value("min_count", 0);
                 h.MaxCount = e.value("max_count", 0);
                 h.CommentType = e.value("comment_type", 1);
+                if (h.CommentType < 1 || h.CommentType > 3) continue;
                 h.CommentWord = e.value("comment_word", "");
                 h.EmptyMetricValue = e.value("empty_metric", 1);
                 h.EmptyMaxCount    = e.value("empty_max_count", 0);
@@ -234,7 +245,13 @@ namespace settings {
             }
             MaxHistory = j.value("max", 20);
             return true;
-        } catch (...) { return false; }
+        } catch (const json::parse_error& e) {
+            std::cerr << "Файл истории поврежден. История будет очищена.\n";
+            History.clear();
+            return true;
+        } catch (...) { 
+            return false; 
+        }
     }
 
     inline bool SaveHistory(const std::string& path = "history.json") {
@@ -260,18 +277,9 @@ namespace settings {
         return true;
     }
 
-    inline bool HistoryEquals(const HistoryEntry& a, const HistoryEntry& b) {
-        return a.Pattern == b.Pattern && a.ReqType == b.ReqType && a.Language == b.Language &&
-               a.Word == b.Word && a.X == b.X && a.Y == b.Y && a.Z == b.Z &&
-               a.QuantityType == b.QuantityType && a.MinCount == b.MinCount && a.MaxCount == b.MaxCount;
-    }
-
     inline void AddToHistory(const HistoryEntry& e) {
-        for (auto it = History.begin(); it != History.end(); ++it) {
-            if (HistoryEquals(*it, e)) { History.erase(it); break; }
-        }
-        History.insert(History.begin(), e);
-        while ((int)History.size() > MaxHistory) History.pop_back();
+        History.insert(History.begin(), e); // Просто добавляем в начало
+        while ((int)History.size() > MaxHistory) History.pop_back(); // И следим за лимитом
     }
 
     inline bool LoadFavorites(const std::string& path = "favorites.json") {
@@ -303,6 +311,7 @@ namespace settings {
                 f.MinCount = e.value("min_count", 0);
                 f.MaxCount = e.value("max_count", 0);
                 f.CommentType = e.value("comment_type", 1);
+                if (f.CommentType < 1 || f.CommentType > 3) continue;
                 f.CommentWord = e.value("comment_word", "");
                 f.EmptyMetricValue = e.value("empty_metric", 1);
                 f.EmptyMaxCount    = e.value("empty_max_count", 0);
@@ -310,7 +319,13 @@ namespace settings {
             }
             MaxFavorites = j.value("max", 50);
             return true;
-        } catch (...) { return false; }
+        } catch (const json::parse_error& e) {
+            std::cerr << "Файл избранного поврежден. Избранное будет очищено.\n";
+            Favorites.clear();
+            return true;
+        } catch (...) { 
+            return false; 
+        }
     }
 
     inline bool SaveFavorites(const std::string& path = "favorites.json") {
@@ -337,10 +352,7 @@ namespace settings {
     }
 
     inline void AddToFavorites(const FavoriteEntry& e) {
-        for (auto it = Favorites.begin(); it != Favorites.end(); ++it) {
-            if (it->Pattern == e.Pattern && it->ReqType == e.ReqType && it->Language == e.Language) { Favorites.erase(it); break; }
-        }
-        Favorites.insert(Favorites.begin(), e);
+        Favorites.insert(Favorites.begin(), e); // Просто добавляем
         while ((int)Favorites.size() > MaxFavorites) Favorites.pop_back();
     }
 
@@ -359,7 +371,13 @@ namespace settings {
             }
             MaxClipboardEntries = j.value("max", 50);
             return true;
-        } catch (...) { return false; }
+        } catch (const json::parse_error& e) {
+            std::cerr << "Файл истории буфера поврежден. Будет очищен.\n";
+            ClipboardHistory.clear();
+            return true;
+        } catch (...) { 
+            return false; 
+        }
     }
 
     inline bool SaveClipboardHistory(const std::string& path = "clipboard_history.json") {

@@ -96,7 +96,6 @@
     "До 200 МБ": 200
   },
   "output": {
-    "colored_output": true,
     "results_file": "search_results.txt",
     "show_first_n": 50
   }
