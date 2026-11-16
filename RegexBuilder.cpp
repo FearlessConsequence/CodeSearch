@@ -39,6 +39,7 @@ namespace regex_builder {
         while ((pos = escaped.find(DOLLAR_PLACEHOLDER)) != std::string::npos) escaped.replace(pos, DOLLAR_PLACEHOLDER.length(), R"($)");
         return escaped;
     }
+    
     std::string EscapeXyzWithBounds(const std::string& s) {
         size_t a = s.find_first_not_of(" \t\r\n");
         if (a == std::string::npos) return "";
@@ -46,27 +47,6 @@ namespace regex_builder {
         std::string trimmed = s.substr(a, b - a + 1);
 
         std::string esc = EscapeXyz(trimmed);
-
-        // B2: если % на границе, а следующий/предыдущий значимый символ — словесный,
-        // вставляем \b после/перед всеми \s* от ведущих/хвостовых %, чтобы граница
-        // слова сохранялась даже при пустом матче \s*.
-        if (trimmed.front() == '%') {
-            size_t k = 0;
-            while (k < trimmed.size() && trimmed[k] == '%') ++k;
-            if (k < trimmed.size() &&
-                (std::isalnum((unsigned char)trimmed[k]) || trimmed[k] == '_'))
-                esc.insert(k * 3, R"(\b)");  // "\\s*" = 3 символа
-        }
-        if (trimmed.back() == '%') {
-            size_t k = 0;
-            while (k < trimmed.size() && trimmed[trimmed.size() - 1 - k] == '%') ++k;
-            if (k < trimmed.size()) {
-                char prev = trimmed[trimmed.size() - 1 - k];
-                if (std::isalnum((unsigned char)prev) || prev == '_')
-                    esc.insert(esc.size() - k * 3, R"(\b)");
-            }
-        }
-
         bool leftBound  = std::isalnum((unsigned char)trimmed.front()) || trimmed.front() == '_';
         bool rightBound = std::isalnum((unsigned char)trimmed.back())  || trimmed.back()  == '_';
         if (leftBound)  esc = R"(\b)" + esc;

@@ -1,5 +1,5 @@
-# Собрано 2026-11-15 09:13:31
-# Всего файлов: 19
+# Собрано 2026-11-15 10:02:16
+# Всего файлов: 20
 ======================================================================
 
 ======================================================================
@@ -751,13 +751,20 @@ namespace file_searcher {
     static bool IsWordChar(unsigned char c) {
         return std::isalnum(c) || c == '_';
     }
-
+        
     static bool HasTypeWordBefore(const std::string& content, size_t idStart) {
         size_t p = idStart;
         while (p > 0 && std::isspace((unsigned char)content[p - 1])) --p;
         if (p == 0) return false;
-        if (content[p - 1] == '>') return true;  // generic: Foo<int> foo(...)
+
+        if (content[p - 1] == '>') {
+            // Защита от оператора -> (стрелка), чтобы p->foo() не считалось объявлением
+            if (p >= 2 && content[p - 2] == '-') return false;
+            return true;  // generic: Foo<int> foo(...)
+        }
+
         if (!IsWordChar((unsigned char)content[p - 1])) return false;
+        
         size_t wordEnd = p;
         while (p > 0 && IsWordChar((unsigned char)content[p - 1])) --p;
         std::string word = content.substr(p, wordEnd - p);
@@ -878,9 +885,9 @@ namespace file_searcher {
             size_t end   = line.find_last_not_of(" \t");
             std::string trimmed = (start == std::string::npos) ? "" : line.substr(start, end - start + 1);
             if (trimmed.size() > 80) {
-                size_t st = 0;
-                if (st + 80 > trimmed.size()) st = trimmed.size() - 80;
-                trimmed = "..." + trimmed.substr(st, 80) + "...";
+                size_t st = utf8::SafeCut(trimmed, 0);
+                size_t en = utf8::SafeCut(trimmed, st + 80);
+                trimmed = "..." + trimmed.substr(st, en - st) + "...";
             }
             results.push_back({file, lineNum, trimmed});
         }
@@ -1018,6 +1025,30 @@ namespace file_searcher {
             size_t jb = i;
             while (jb > 0 && std::isspace((unsigned char)content[jb - 1])) --jb;
             if (jb == 0) continue;
+
+            // Шаблонный вызов: Foo<T>(...) — перед ( стоит >, не являющийся ->
+            if (content[jb - 1] == '>' && !(jb >= 2 && content[jb - 2] == '-')) {
+                int angleDepth = 0;
+                size_t k = jb - 1;
+                bool found = false;
+                while (k > 0) {
+                    char ch = content[k];
+                    if (ch == '>') angleDepth++;
+                    else if (ch == '<') {
+                        angleDepth--;
+                        if (angleDepth == 0) { found = true; break; }
+                        if (angleDepth < 0) break;
+                    }
+                    --k;
+                }
+                if (!found || k == 0) continue;
+                size_t beforeLt = k;
+                while (beforeLt > 0 && std::isspace((unsigned char)content[beforeLt - 1])) --beforeLt;
+                if (beforeLt == 0) continue;
+                if (!std::isalnum((unsigned char)content[beforeLt - 1]) && content[beforeLt - 1] != '_') continue;
+                jb = beforeLt;
+            }
+
             if (!std::isalnum((unsigned char)content[jb - 1]) && content[jb - 1] != '_') continue;
 
             size_t idStart = jb;
@@ -1243,6 +1274,13 @@ namespace file_searcher {
             if (bestOpen == (size_t)-1) continue;
             if (HasStatementEndBefore(content, xEnd, bestOpen)) continue;
             if (seenOpens.count(bestOpen)) continue;
+
+            // Привязываем { к ближайшему X: если следующий X идёт до {,
+            // то этот блок принадлежит ему, а не текущему (например, if (a) if (b) {}).
+            auto nextIt = it;
+            ++nextIt;
+            if (nextIt != std::sregex_iterator() && nextIt->position() < bestOpen) continue;
+
             seenOpens.insert(bestOpen);
 
             size_t close = (size_t)-1;
@@ -1292,9 +1330,15 @@ namespace file_searcher {
             std::smatch m;
             bool hasY = std::regex_search(cleanLine, m, rxY);
             if (!hasY) {
+                // Считаем все вхождения X в строке, чтобы не дублировать записи
+                int count = 0;
                 for (auto it = std::sregex_iterator(cleanLine.begin(), cleanLine.end(), rxX);
                     it != std::sregex_iterator(); ++it) {
-                    results.push_back({file, lineNum, TrimmedLineAt(content, lineStart)});
+                    count++;
+                }
+                if (count > 0) {
+                    // Пушим одну запись на строку с указанием количества совпадений
+                    results.push_back({file, lineNum, TrimmedLineAt(content, lineStart), "", count});
                 }
             }
 
@@ -1335,8 +1379,14 @@ namespace file_searcher {
 
         try {
             if (isCombinationXButNotY && req.XButNotYModeValue == regex_builder::XButNotYMode::ByPosition) {
-                wholeRx = std::regex(regex_builder::EscapeXyzWithBounds(req.X), std::regex::multiline | std::regex::optimize);
-                yRx = std::regex(regex_builder::EscapeXyzWithBounds(req.Y), std::regex::multiline | std::regex::optimize);
+                std::string px = regex_builder::EscapeXyzWithBounds(req.X);
+                std::string py = regex_builder::EscapeXyzWithBounds(req.Y);
+                if (px.empty() || py.empty()) {
+                    std::cerr << colors::Error << "Пустое выражение — поиск отменён." << colors::Reset << "\n";
+                    return results;
+                }
+                wholeRx = std::regex(px, std::regex::multiline | std::regex::optimize);
+                yRx = std::regex(py, std::regex::multiline | std::regex::optimize);
             } else if (!isCombinationXButNotY) {
                 if (needLineRx)  lineRx  = std::regex(pattern, std::regex::optimize);
                 if (needWholeRx) wholeRx = std::regex(pattern, std::regex::multiline | std::regex::optimize);
@@ -1656,6 +1706,7 @@ namespace file_searcher {
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
 
 #include "Colors.h"
 #include "Settings.h"
@@ -1726,6 +1777,8 @@ bool CopyAndRemember(const std::string& text, const std::string& source) {
     return ok;
 }
 
+static std::string PluralMatches(int n);
+
 void ShowResults(const std::vector<file_searcher::SearchResult>& results, const file_searcher::SearchOptions& options, int limit) {
     if (results.empty()) {
         std::cout << colors::Dim << "(ничего не найдено)" << colors::Reset << "\n";
@@ -1756,10 +1809,10 @@ static std::string PluralMatches(int n) {
 }
 
 void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
-    std::vector<std::string> uniqueFiles;
+    std::unordered_set<std::string> uniqueFiles;
+    uniqueFiles.reserve(results.size());
     for (const auto& r : results) {
-        std::string rel = ToUtf8(r.File);
-        if (std::find(uniqueFiles.begin(), uniqueFiles.end(), rel) == uniqueFiles.end()) uniqueFiles.push_back(rel);
+        uniqueFiles.insert(ToUtf8(r.File));
     }
     int files = (int)uniqueFiles.size();
     int count = (int)results.size();
@@ -1812,9 +1865,14 @@ static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
         case regex_builder::SearchType::Quantity: {
             static const char* q[] = { "", "цифр в числе", "Длина строки", "Аргументы" };
             int i = (int)req.Quantity;
-            return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") +
-                   " N=" + std::to_string(req.MinCount) +
-                   (req.MaxCount > 0 ? " M=" + std::to_string(req.MaxCount) : "");
+            std::string cmp;
+            switch (req.NumberCompareValue) {
+                case regex_builder::NumberCompare::Greater: cmp = "> "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Equal:   cmp = "= "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Less:    cmp = "< "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Between: cmp = std::to_string(req.MinCount) + ".." + std::to_string(req.MaxCount); break;
+            }
+            return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") + " " + cmp;
         }
         case regex_builder::SearchType::Comment: {
             std::string mode;
@@ -2081,6 +2139,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                     auto& h = settings::History[k - 1];
                     pattern = h.Pattern;
                     RestoreRequest(req, h);
+                    hasResults = false;
+                    lastResults.clear();
                     std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
                     if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
                     std::cout << "\n";
@@ -2107,6 +2167,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 auto& f = settings::Favorites[k - 1];
                 pattern = f.Pattern;
                 RestoreRequest(req, f);
+                hasResults = false;
+                lastResults.clear();
                 std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
                 if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
                 std::cout << "\n";
@@ -2146,6 +2208,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             auto& h = settings::History[k - 1];
             pattern = h.Pattern;
             RestoreRequest(req, h);
+            hasResults = false;
+            lastResults.clear();
             std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
             if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
@@ -2341,26 +2405,6 @@ int main() {
             std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
             if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
-        }
-
-        if (isStructure || isCombination) {
-            file_searcher::SearchOptions options;
-            if (prompt::AskSearchOptions(options, req)) {
-                std::cout << "\nПоиск...\n\n";
-                size_t fileCount = 0;
-                size_t skippedCount = 0;
-                auto results = file_searcher::Search(req, pattern, options, &fileCount, &skippedCount);
-                std::cout << "Найдено файлов: " << fileCount << "\n";
-                if (skippedCount > 0) {
-                    std::cout << colors::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << colors::Reset;
-                }
-                std::cout << "\n";
-                ShowResults(results, options, options.ShowFirstN);
-                if ((int)results.size() > options.ShowFirstN) std::cout << "... и ещё " << (results.size() - options.ShowFirstN) << "\n";
-                std::cout << "\n";
-                PrintTotals(results);
-                std::cout << "\n";
-            }
         }
 
         RunActionMenu(req, pattern);
@@ -3692,6 +3736,7 @@ namespace regex_builder {
         while ((pos = escaped.find(DOLLAR_PLACEHOLDER)) != std::string::npos) escaped.replace(pos, DOLLAR_PLACEHOLDER.length(), R"($)");
         return escaped;
     }
+    
     std::string EscapeXyzWithBounds(const std::string& s) {
         size_t a = s.find_first_not_of(" \t\r\n");
         if (a == std::string::npos) return "";
@@ -3699,27 +3744,6 @@ namespace regex_builder {
         std::string trimmed = s.substr(a, b - a + 1);
 
         std::string esc = EscapeXyz(trimmed);
-
-        // B2: если % на границе, а следующий/предыдущий значимый символ — словесный,
-        // вставляем \b после/перед всеми \s* от ведущих/хвостовых %, чтобы граница
-        // слова сохранялась даже при пустом матче \s*.
-        if (trimmed.front() == '%') {
-            size_t k = 0;
-            while (k < trimmed.size() && trimmed[k] == '%') ++k;
-            if (k < trimmed.size() &&
-                (std::isalnum((unsigned char)trimmed[k]) || trimmed[k] == '_'))
-                esc.insert(k * 3, R"(\b)");  // "\\s*" = 3 символа
-        }
-        if (trimmed.back() == '%') {
-            size_t k = 0;
-            while (k < trimmed.size() && trimmed[trimmed.size() - 1 - k] == '%') ++k;
-            if (k < trimmed.size()) {
-                char prev = trimmed[trimmed.size() - 1 - k];
-                if (std::isalnum((unsigned char)prev) || prev == '_')
-                    esc.insert(esc.size() - k * 3, R"(\b)");
-            }
-        }
-
         bool leftBound  = std::isalnum((unsigned char)trimmed.front()) || trimmed.front() == '_';
         bool rightBound = std::isalnum((unsigned char)trimmed.back())  || trimmed.back()  == '_';
         if (leftBound)  esc = R"(\b)" + esc;
@@ -5032,6 +5056,801 @@ public class H
 }
 
 alice is lovely woman
+
+======================================================================
+# ФАЙЛ: tests.cpp
+======================================================================
+
+#include <iostream>
+#include <string>
+#include <regex>
+#include <fstream>
+#include <filesystem>
+#include <vector>
+#include <ctime>
+#include <cstdlib>
+
+#include "RegexBuilder.h"
+#include "FileSearcher.h"
+#include "Settings.h"
+#include "Utf8.h"
+
+namespace fs = std::filesystem;
+
+// ============================================================
+// Мини-фреймворк
+// ============================================================
+
+static int g_passed = 0;
+static int g_failed = 0;
+
+#define CHECK_EQ(actual, expected) do { \
+    auto _a = (actual); auto _e = (expected); \
+    if (!(_a == _e)) { \
+        std::cerr << "  FAIL " << __FILE__ << ":" << __LINE__ \
+                  << "  expected [" << _e << "] got [" << _a << "]\n"; \
+        ++g_failed; \
+    } else { ++g_passed; } \
+} while (0)
+
+#define CHECK_TRUE(x)  CHECK_EQ(!!(x), true)
+#define CHECK_FALSE(x) CHECK_EQ(!!(x), false)
+
+static void Section(const char* name) { std::cout << "[" << name << "]\n"; }
+
+// ============================================================
+// Unit: Escape
+// ============================================================
+
+static void Test_Escape() {
+    Section("Escape");
+    using regex_builder::Escape;
+    CHECK_EQ(Escape(""),         "");
+    CHECK_EQ(Escape("abc"),      "abc");
+    CHECK_EQ(Escape("a b"),      "a b");
+    CHECK_EQ(Escape("a-b/c"),    "a-b/c");
+    CHECK_EQ(Escape("a.b*c"),    "a\\.b\\*c");
+    CHECK_EQ(Escape("a|b"),      "a\\|b");
+    CHECK_EQ(Escape("a(b)"),     "a\\(b\\)");
+    CHECK_EQ(Escape("a[b]"),     "a\\[b\\]");
+    CHECK_EQ(Escape("a{b}"),     "a\\{b\\}");
+    CHECK_EQ(Escape("a+b?"),     "a\\+b\\?");
+    CHECK_EQ(Escape("a^b$"),     "a\\^b\\$");
+    CHECK_EQ(Escape("a\\b"),     "a\\\\b");
+}
+
+// ============================================================
+// Unit: EscapeXyz
+// ============================================================
+
+static void Test_EscapeXyz() {
+    Section("EscapeXyz");
+    using regex_builder::EscapeXyz;
+    CHECK_EQ(EscapeXyz(""),        "");
+    CHECK_EQ(EscapeXyz("abc"),     "abc");
+    CHECK_EQ(EscapeXyz("a%b"),     "a\\s*b");
+    CHECK_EQ(EscapeXyz("a*b"),     "a[\\s\\S]*?b");
+    CHECK_EQ(EscapeXyz("^foo$"),   "^foo$");
+    CHECK_EQ(EscapeXyz("a.b(c)"),  "a\\.b\\(c\\)");
+    CHECK_EQ(EscapeXyz("foo % bar"), "foo \\s* bar");
+    CHECK_EQ(EscapeXyz("%%"),      "\\s*\\s*");
+    CHECK_EQ(EscapeXyz("**"),      "[\\s\\S]*?[\\s\\S]*?");
+    CHECK_EQ(EscapeXyz("a^b"),     "a^b");
+    CHECK_EQ(EscapeXyz("a$b"),     "a$b");
+    CHECK_EQ(EscapeXyz("a|b"),     "a\\|b");
+}
+
+// ============================================================
+// Unit: EscapeXyzWithBounds
+// ============================================================
+
+static void Test_EscapeXyzWithBounds() {
+    Section("EscapeXyzWithBounds");
+    using regex_builder::EscapeXyzWithBounds;
+    // Простое слово — обе границы
+    CHECK_EQ(EscapeXyzWithBounds("hello"),   "\\bhello\\b");
+    // Ведущие/хвостовые пробелы
+    CHECK_EQ(EscapeXyzWithBounds(" hello "), "\\bhello\\b");
+    CHECK_EQ(EscapeXyzWithBounds("  foo  "), "\\bfoo\\b");
+    CHECK_EQ(EscapeXyzWithBounds("\tfoo\n"), "\\bfoo\\b");
+    // Не-словесные символы на границах — без \b с этой стороны
+    CHECK_EQ(EscapeXyzWithBounds("---"),     "---");
+    CHECK_EQ(EscapeXyzWithBounds(".foo"),    "\\.foo\\b");
+    CHECK_EQ(EscapeXyzWithBounds("foo."),    "\\bfoo\\.");
+    CHECK_EQ(EscapeXyzWithBounds("_foo"),    "\\b_foo\\b");
+    CHECK_EQ(EscapeXyzWithBounds("123"),     "\\b123\\b");
+    // Пустое / пробельное
+    CHECK_EQ(EscapeXyzWithBounds(""),        "");
+    CHECK_EQ(EscapeXyzWithBounds("   "),     "");
+    CHECK_EQ(EscapeXyzWithBounds("\t\n"),    "");
+    // Спецсимволы
+    CHECK_EQ(EscapeXyzWithBounds("%foo"),    "\\s*foo\\b");
+    CHECK_EQ(EscapeXyzWithBounds("foo%"),    "\\bfoo\\s*");
+    CHECK_EQ(EscapeXyzWithBounds("*"),       "[\\s\\S]*?");
+    CHECK_EQ(EscapeXyzWithBounds("^"),       "^");
+    CHECK_EQ(EscapeXyzWithBounds("$"),       "$");
+}
+
+// ============================================================
+// Unit: BuildWord
+// ============================================================
+
+static void Test_BuildWord() {
+    Section("BuildWord");
+    auto make = [](const std::string& w, bool whole) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Word;
+        r.Word = w;
+        r.WordWholeOnly = whole;
+        return regex_builder::Build(r);
+    };
+    CHECK_EQ(make("hello", true),   "\\bhello\\b");
+    CHECK_EQ(make("hello", false),  "hello");
+    CHECK_EQ(make("a.b",   false),  "a\\.b");
+    CHECK_EQ(make("a.b",   true),   "\\ba\\.b\\b");
+    CHECK_EQ(make("_foo",  true),   "\\b_foo\\b");
+    CHECK_EQ(make(".foo",  true),   "\\.foo\\b");
+    CHECK_EQ(make("foo.",  true),   "\\bfoo\\.");
+    CHECK_EQ(make("---",   true),   "---");
+    CHECK_EQ(make("123",   true),   "\\b123\\b");
+    CHECK_EQ(make("",      true),   "");
+    CHECK_EQ(make("a(b)",  false),  "a\\(b\\)");
+    CHECK_EQ(make("a(b)",  true),   "\\ba\\(b\\)");
+}
+
+// ============================================================
+// Unit: BuildCombination (XOrY)
+// ============================================================
+
+static void Test_BuildCombination_XOrY() {
+    Section("BuildCombination (XOrY)");
+    auto make = [](const std::string& x) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Combination;
+        r.Combination = regex_builder::CombinationType::XOrY;
+        r.X = x;
+        return regex_builder::Build(r);
+    };
+    CHECK_EQ(make("foo, bar"),    "(?:\\bfoo\\b|\\bbar\\b)");
+    CHECK_EQ(make("foo"),         "(?:\\bfoo\\b)");
+    CHECK_EQ(make("foo,bar,baz"), "(?:\\bfoo\\b|\\bbar\\b|\\bbaz\\b)");
+    CHECK_EQ(make("foo,  bar "),  "(?:\\bfoo\\b|\\bbar\\b)");
+    CHECK_EQ(make(""),            "");
+    CHECK_EQ(make("  "),          "");
+    CHECK_EQ(make("foo bar"),     "(?:\\bfoo bar\\b)");
+    CHECK_EQ(make("a-b, c-d"),    "(?:\\ba-b\\b|\\bc-d\\b)");
+}
+
+// ============================================================
+// Unit: BuildStructure (X→Y→Z)
+// ============================================================
+
+static void Test_BuildStructure_XYZ() {
+    Section("BuildStructure (X->Y->Z)");
+    auto make = [](const std::string& x, const std::string& y, const std::string& z) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Structure;
+        r.Structure = regex_builder::StructureType::XAnywhereBeforeYBeforeZ;
+        r.X = x; r.Y = y; r.Z = z;
+        return regex_builder::Build(r);
+    };
+    CHECK_EQ(make("a","b","c"), "\\ba\\b[\\s\\S]*?(\\bb\\b)[\\s\\S]*?\\bc\\b");
+    CHECK_EQ(make("foo","bar","baz"), "\\bfoo\\b[\\s\\S]*?(\\bbar\\b)[\\s\\S]*?\\bbaz\\b");
+    CHECK_EQ(make("","b","c"), "");
+    CHECK_EQ(make("a","","c"), "");
+    CHECK_EQ(make("a","b",""), "");
+    CHECK_EQ(make("","",""),   "");
+    CHECK_EQ(make("foo bar","mid","end"), "\\bfoo bar\\b[\\s\\S]*?(\\bmid\\b)[\\s\\S]*?\\bend\\b");
+}
+
+// ============================================================
+// Unit: BuildEmpty
+// ============================================================
+
+static void Test_BuildEmpty() {
+    Section("BuildEmpty");
+    auto make = [](const std::string& x, regex_builder::EmptyMetric m, int n) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Structure;
+        r.Structure = regex_builder::StructureType::XEmpty;
+        r.X = x;
+        r.EmptyMetricValue = m;
+        r.EmptyMaxCount = n;
+        return regex_builder::Build(r);
+    };
+    using M = regex_builder::EmptyMetric;
+    CHECK_EQ(make("if", M::StrictlyEmpty, 0), "[empty-block: if, строго пусто]");
+    CHECK_EQ(make("if", M::MaxChars, 3),      "[empty-block: if, ≤ 3 непроб. символов]");
+    CHECK_EQ(make("if", M::MaxLines, 2),      "[empty-block: if, ≤ 2 строк]");
+    CHECK_EQ(make("catch", M::StrictlyEmpty, 0), "[empty-block: catch, строго пусто]");
+    CHECK_EQ(make("while", M::MaxLines, 0),   "[empty-block: while, ≤ 0 строк]");
+}
+
+// ============================================================
+// Unit: BuildComment
+// ============================================================
+
+static void Test_BuildComment() {
+    Section("BuildComment");
+    auto make = [](regex_builder::CommentType t, const std::string& lang, const std::string& w) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Comment;
+        r.Comment = t;
+        r.Language = lang;
+        r.CommentWord = w;
+        return regex_builder::Build(r);
+    };
+    using T = regex_builder::CommentType;
+    CHECK_EQ(make(T::StartLine, "C#", ""),     "[comments: в начале строки, язык: C#, слово: (все)]");
+    CHECK_EQ(make(T::EndLine, "C#", "TODO"),   "[comments: в конце строки, язык: C#, слово: TODO]");
+    CHECK_EQ(make(T::CommentedCode, "C#", ""), "[comments: все комментарии, язык: C#, слово: (все)]");
+    CHECK_EQ(make(T::StartLine, "Python", ""), "[comments: в начале строки, язык: Python, слово: (все)]");
+    CHECK_EQ(make(T::EndLine, "C++", "FIX"),   "[comments: в конце строки, язык: C++, слово: FIX]");
+}
+
+// ============================================================
+// Unit: BuildQuantity (Numbers)
+// ============================================================
+
+static bool RxHit(const std::string& pattern, const std::string& text) {
+    try { return std::regex_search(text, std::regex(pattern)); }
+    catch (...) { return false; }
+}
+
+static void Test_BuildQuantity_Numbers() {
+    Section("BuildQuantity (Numbers)");
+    auto make = [](regex_builder::NumberCompare c, int mn, int mx) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Quantity;
+        r.Quantity = regex_builder::QuantityType::Numbers;
+        r.NumberCompareValue = c;
+        r.MinCount = mn; r.MaxCount = mx;
+        return regex_builder::Build(r);
+    };
+    using NC = regex_builder::NumberCompare;
+
+    // Equal
+    std::string eq3 = make(NC::Equal, 3, 0);
+    CHECK_TRUE (RxHit(eq3, "999"));
+    CHECK_FALSE(RxHit(eq3, "99"));
+    CHECK_FALSE(RxHit(eq3, "1000"));
+    CHECK_FALSE(RxHit(eq3, "12a"));
+
+    // Greater
+    std::string gt3 = make(NC::Greater, 3, 0);
+    CHECK_TRUE (RxHit(gt3, "1000"));
+    CHECK_TRUE (RxHit(gt3, "12345"));
+    CHECK_FALSE(RxHit(gt3, "999"));
+
+    // Less
+    std::string lt5 = make(NC::Less, 5, 0);
+    CHECK_TRUE (RxHit(lt5, "1234"));
+    CHECK_TRUE (RxHit(lt5, "1"));
+    CHECK_FALSE(RxHit(lt5, "12345"));
+
+    // Between
+    std::string bt = make(NC::Between, 2, 4);
+    CHECK_TRUE (RxHit(bt, "12"));
+    CHECK_TRUE (RxHit(bt, "1234"));
+    CHECK_FALSE(RxHit(bt, "1"));
+    CHECK_FALSE(RxHit(bt, "12345"));
+}
+
+// ============================================================
+// Unit: BuildQuantity (LineLength) — только string compare
+// ============================================================
+
+static void Test_BuildQuantity_LineLength() {
+    Section("BuildQuantity (LineLength)");
+    auto make = [](regex_builder::NumberCompare c, int mn, int mx) {
+        regex_builder::SearchRequest r;
+        r.Type = regex_builder::SearchType::Quantity;
+        r.Quantity = regex_builder::QuantityType::LineLength;
+        r.NumberCompareValue = c;
+        r.MinCount = mn; r.MaxCount = mx;
+        return regex_builder::Build(r);
+    };
+    using NC = regex_builder::NumberCompare;
+    CHECK_EQ(make(NC::Greater, 5, 0),  "^.{6,}$");
+    CHECK_EQ(make(NC::Equal,   5, 0),  "^.{5}$");
+    CHECK_EQ(make(NC::Less,    5, 0),  "^.{1,4}$");
+    CHECK_EQ(make(NC::Between, 5, 10), "^.{5,10}$");
+    CHECK_EQ(make(NC::Greater, 50, 0), "^.{51,}$");
+    CHECK_EQ(make(NC::Less,    1, 0),  "(?!)");
+}
+
+// ============================================================
+// Unit: patterns::ForFormat
+// ============================================================
+
+static void Test_ForFormat() {
+    Section("patterns::ForFormat");
+    using patterns::FormatType;
+    using patterns::ForFormat;
+
+    std::string email = ForFormat(FormatType::Email);
+    CHECK_TRUE (RxHit(email, "admin@company.com"));
+    CHECK_TRUE (RxHit(email, "help@mail.ru"));
+    CHECK_TRUE (RxHit(email, "a.b+c@x.y"));
+    CHECK_FALSE(RxHit(email, "@no-user.com"));
+    CHECK_FALSE(RxHit(email, "no-at-sign"));
+
+    std::string url = ForFormat(FormatType::Url);
+    CHECK_TRUE (RxHit(url, "https://api.example.com/v1/users"));
+    CHECK_TRUE (RxHit(url, "http://docs.local/page"));
+    CHECK_TRUE (RxHit(url, "https://localhost:5000"));
+    CHECK_FALSE(RxHit(url, "ftp://files.example.com"));
+    CHECK_FALSE(RxHit(url, "javascript:void(0)"));
+
+    std::string ip = ForFormat(FormatType::Ip);
+    CHECK_TRUE (RxHit(ip, "192.168.1.1"));
+    CHECK_TRUE (RxHit(ip, "10.0.0.1"));
+    CHECK_TRUE (RxHit(ip, "127.0.0.1"));
+    CHECK_FALSE(RxHit(ip, "192.168.1.1.1"));
+    CHECK_FALSE(RxHit(ip, "256.1.1.1"));
+
+    std::string guid = ForFormat(FormatType::Guid);
+    CHECK_TRUE (RxHit(guid, "550e8400-e29b-41d4-a716-446655440000"));
+    CHECK_TRUE (RxHit(guid, "550E8400-E29B-41D4-A716-446655440000"));
+    CHECK_FALSE(RxHit(guid, "550e8400-e29b-41d4-a716-446655440000-extra"));
+    CHECK_FALSE(RxHit(guid, "not-a-guid"));
+
+    std::string date = ForFormat(FormatType::Date);
+    CHECK_TRUE (RxHit(date, "2024-05-12"));
+    CHECK_TRUE (RxHit(date, "12.05.2024"));
+    CHECK_TRUE (RxHit(date, "2024/05/12"));
+    CHECK_TRUE (RxHit(date, "2023-01-01"));
+    CHECK_FALSE(RxHit(date, "2024-5-1"));
+    CHECK_FALSE(RxHit(date, "2024-13-01"));
+    CHECK_FALSE(RxHit(date, "2024-05-32"));
+}
+
+// ============================================================
+// Unit: utf8::SafeCut
+// ============================================================
+
+static void Test_SafeCut() {
+    Section("utf8::SafeCut");
+    using utf8::SafeCut;
+    // ASCII — без изменений
+    CHECK_EQ(SafeCut("abc", 0), (size_t)0);
+    CHECK_EQ(SafeCut("abc", 1), (size_t)1);
+    CHECK_EQ(SafeCut("abc", 2), (size_t)2);
+    CHECK_EQ(SafeCut("abc", 3), (size_t)3);
+    // "привет" — 6 букв, 12 байт
+    std::string s = "привет";
+    CHECK_EQ(s.size(), (size_t)12);
+    CHECK_EQ(SafeCut(s, 0),  (size_t)0);
+    CHECK_EQ(SafeCut(s, 1),  (size_t)0);   // середина первой буквы
+    CHECK_EQ(SafeCut(s, 2),  (size_t)2);   // граница
+    CHECK_EQ(SafeCut(s, 3),  (size_t)2);   // середина второй
+    CHECK_EQ(SafeCut(s, 4),  (size_t)4);
+    CHECK_EQ(SafeCut(s, 11), (size_t)10);  // середина последней
+    CHECK_EQ(SafeCut(s, 12), (size_t)12);
+}
+
+// ============================================================
+// Integration: общий хелпер
+// ============================================================
+
+struct TempDir {
+    fs::path path;
+    TempDir() {
+        path = fs::temp_directory_path() / ("cs_test_" + std::to_string(std::rand()));
+        fs::create_directories(path);
+    }
+    ~TempDir() { std::error_code ec; fs::remove_all(path, ec); }
+    void Write(const std::string& name, const std::string& content) const {
+        std::ofstream out(path / name, std::ios::binary);
+        out << content;
+    }
+};
+
+static file_searcher::SearchOptions MakeOptions(const fs::path& dir) {
+    file_searcher::SearchOptions o;
+    o.Directory = dir;
+    o.Extensions = {".cs"};
+    o.ExcludeDirs = {};
+    o.ExcludeFiles = {};
+    o.MaxFileSizeMb = -1;
+    o.ShowFirstN = 1000;
+    return o;
+}
+
+// ============================================================
+// Integration: Word с границами + MatchCount
+// ============================================================
+
+static void Test_Int_Word_Bounded() {
+    Section("Int: Word (bounded)");
+    TempDir t; t.Write("test.cs", "name username name\nfoo name\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Word;
+    req.Word = "name";
+    req.WordWholeOnly = true;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[0].MatchCount, 2);
+        CHECK_EQ(res[1].Line, 2);
+        CHECK_EQ(res[1].MatchCount, 1);
+    }
+}
+
+// ============================================================
+// Integration: Word без границ
+// ============================================================
+
+static void Test_Int_Word_Unbounded() {
+    Section("Int: Word (unbounded)");
+    TempDir t; t.Write("test.cs", "name username filename\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Word;
+    req.Word = "name";
+    req.WordWholeOnly = false;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[0].MatchCount, 3);
+    }
+}
+
+// ============================================================
+// Integration: Format — Email
+// ============================================================
+
+static void Test_Int_Format_Email() {
+    Section("Int: Format Email");
+    TempDir t; t.Write("test.cs",
+        "e1 = \"admin@company.com\";\n"
+        "bad = \"@no-user.com\";\n"
+        "e2 = \"help@mail.ru\";\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Format;
+    req.Format = patterns::FormatType::Email;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[1].Line, 3);
+    }
+}
+
+// ============================================================
+// Integration: Format — IP
+// ============================================================
+
+static void Test_Int_Format_IP() {
+    Section("Int: Format IP");
+    TempDir t; t.Write("test.cs",
+        "ip1 = \"192.168.1.1\";\n"
+        "bad = \"192.168.1.1.1\";\n"
+        "ip2 = \"10.0.0.1\";\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Format;
+    req.Format = patterns::FormatType::Ip;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[1].Line, 3);
+    }
+}
+
+// ============================================================
+// Integration: Quantity Numbers — Equal 3
+// ============================================================
+
+static void Test_Int_Numbers_Equal3() {
+    Section("Int: Numbers Equal 3");
+    TempDir t; t.Write("test.cs",
+        "x = 999;\n"
+        "y = 42;\n"
+        "z = 1000;\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::Numbers;
+    req.NumberCompareValue = regex_builder::NumberCompare::Equal;
+    req.MinCount = 3;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: Quantity Numbers — Greater 2
+// ============================================================
+
+static void Test_Int_Numbers_Greater2() {
+    Section("Int: Numbers Greater 2");
+    TempDir t; t.Write("test.cs",
+        "a = 5;\n"
+        "b = 999;\n"
+        "c = 12345;\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::Numbers;
+    req.NumberCompareValue = regex_builder::NumberCompare::Greater;
+    req.MinCount = 2;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+}
+
+// ============================================================
+// Integration: LineLength > 10
+// ============================================================
+
+static void Test_Int_LineLength() {
+    Section("Int: LineLength > 10");
+    TempDir t; t.Write("test.cs",
+        "short\n"
+        "this_is_long_line\n"
+        "mid\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::LineLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Greater;
+    req.MinCount = 10;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 2);
+}
+
+// ============================================================
+// Integration: XOrY
+// ============================================================
+
+static void Test_Int_XOrY() {
+    Section("Int: XOrY");
+    TempDir t; t.Write("test.cs", "foo bar\nbaz\nqux\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Combination;
+    req.Combination = regex_builder::CombinationType::XOrY;
+    req.X = "foo, baz";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[1].Line, 2);
+    }
+}
+
+// ============================================================
+// Integration: Structure XYZ
+// ============================================================
+
+static void Test_Int_StructureXYZ() {
+    Section("Int: Structure X->Y->Z");
+    TempDir t; t.Write("test.cs",
+        "a b c\n"
+        "a x y z\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XAnywhereBeforeYBeforeZ;
+    req.X = "a"; req.Y = "b"; req.Z = "c";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: XButNotY по позиции
+// ============================================================
+
+static void Test_Int_XButNotY_ByPos() {
+    Section("Int: X но не Y (by pos)");
+    TempDir t; t.Write("test.cs",
+        "catch (Exception) { }\n"
+        "catch { }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Combination;
+    req.Combination = regex_builder::CombinationType::XButNotY;
+    req.XButNotYModeValue = regex_builder::XButNotYMode::ByPosition;
+    req.X = "catch";
+    req.Y = "catch (Exception)";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 2);
+}
+
+// ============================================================
+// Integration: XButNotY по строке
+// ============================================================
+
+static void Test_Int_XButNotY_ByLine() {
+    Section("Int: X но не Y (by line)");
+    TempDir t; t.Write("test.cs",
+        "if (x) { Console.WriteLine(); }\n"
+        "if (y) { }\n"
+        "if (z) {\n"
+        "    Console.WriteLine();\n"
+        "}\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Combination;
+    req.Combination = regex_builder::CombinationType::XButNotY;
+    req.XButNotYModeValue = regex_builder::XButNotYMode::ByLine;
+    req.X = "if";
+    req.Y = "Console";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 2);
+        CHECK_EQ(res[1].Line, 3);
+        CHECK_EQ(res[0].MatchCount, 1);
+    }
+}
+
+// ============================================================
+// Integration: EmptyBlocks (strictly empty)
+// ============================================================
+
+static void Test_Int_EmptyBlocks() {
+    Section("Int: EmptyBlocks");
+    TempDir t; t.Write("test.cs",
+        "if (true) { }\n"
+        "if (false) { x; }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "if";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::StrictlyEmpty;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: Comments — StartLine
+// ============================================================
+
+static void Test_Int_Comments_StartLine() {
+    Section("Int: Comments (StartLine)");
+    TempDir t; t.Write("test.cs",
+        "// TODO: fix\n"
+        "int x = 5; // note\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: Comments — EndLine
+// ============================================================
+
+static void Test_Int_Comments_EndLine() {
+    Section("Int: Comments (EndLine)");
+    TempDir t; t.Write("test.cs",
+        "// TODO: fix\n"
+        "int x = 5; // note\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::EndLine;
+    req.Language = "C#";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[1].Line, 2);
+    }
+}
+
+// ============================================================
+// Integration: ArgsLength (basic)
+// ============================================================
+
+static void Test_Int_ArgsLength() {
+    Section("Int: ArgsLength");
+    TempDir t; t.Write("test.cs",
+        "void f(int x, int y) { }\n"
+        "g(1, 2);\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Equal;
+    req.MinCount = 2;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Line, 1);
+        CHECK_EQ(res[0].Kind, std::string("decl"));
+        CHECK_EQ(res[1].Line, 2);
+        CHECK_EQ(res[1].Kind, std::string("call"));
+    }
+}
+
+// ============================================================
+// main
+// ============================================================
+
+int main() {
+    std::srand((unsigned)std::time(nullptr));
+    settings::SetDefaults();
+
+    Test_Escape();
+    Test_EscapeXyz();
+    Test_EscapeXyzWithBounds();
+    Test_BuildWord();
+    Test_BuildCombination_XOrY();
+    Test_BuildStructure_XYZ();
+    Test_BuildEmpty();
+    Test_BuildComment();
+    Test_BuildQuantity_Numbers();
+    Test_BuildQuantity_LineLength();
+    Test_ForFormat();
+    Test_SafeCut();
+
+    Test_Int_Word_Bounded();
+    Test_Int_Word_Unbounded();
+    Test_Int_Format_Email();
+    Test_Int_Format_IP();
+    Test_Int_Numbers_Equal3();
+    Test_Int_Numbers_Greater2();
+    Test_Int_LineLength();
+    Test_Int_XOrY();
+    Test_Int_StructureXYZ();
+    Test_Int_XButNotY_ByPos();
+    Test_Int_XButNotY_ByLine();
+    Test_Int_EmptyBlocks();
+    Test_Int_Comments_StartLine();
+    Test_Int_Comments_EndLine();
+    Test_Int_ArgsLength();
+
+    std::cout << "\n========================================\n";
+    std::cout << "Passed: " << g_passed << ", Failed: " << g_failed << "\n";
+    std::cout << "========================================\n";
+    return g_failed == 0 ? 0 : 1;
+}
 
 ======================================================================
 # ФАЙЛ: Utf8.h

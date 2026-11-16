@@ -5,6 +5,7 @@
 #include <algorithm>
 #include <iomanip>
 #include <sstream>
+#include <unordered_set>
 
 #include "Colors.h"
 #include "Settings.h"
@@ -75,6 +76,8 @@ bool CopyAndRemember(const std::string& text, const std::string& source) {
     return ok;
 }
 
+static std::string PluralMatches(int n);
+
 void ShowResults(const std::vector<file_searcher::SearchResult>& results, const file_searcher::SearchOptions& options, int limit) {
     if (results.empty()) {
         std::cout << colors::Dim << "(ничего не найдено)" << colors::Reset << "\n";
@@ -105,10 +108,10 @@ static std::string PluralMatches(int n) {
 }
 
 void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
-    std::vector<std::string> uniqueFiles;
+    std::unordered_set<std::string> uniqueFiles;
+    uniqueFiles.reserve(results.size());
     for (const auto& r : results) {
-        std::string rel = ToUtf8(r.File);
-        if (std::find(uniqueFiles.begin(), uniqueFiles.end(), rel) == uniqueFiles.end()) uniqueFiles.push_back(rel);
+        uniqueFiles.insert(ToUtf8(r.File));
     }
     int files = (int)uniqueFiles.size();
     int count = (int)results.size();
@@ -161,9 +164,14 @@ static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
         case regex_builder::SearchType::Quantity: {
             static const char* q[] = { "", "цифр в числе", "Длина строки", "Аргументы" };
             int i = (int)req.Quantity;
-            return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") +
-                   " N=" + std::to_string(req.MinCount) +
-                   (req.MaxCount > 0 ? " M=" + std::to_string(req.MaxCount) : "");
+            std::string cmp;
+            switch (req.NumberCompareValue) {
+                case regex_builder::NumberCompare::Greater: cmp = "> "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Equal:   cmp = "= "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Less:    cmp = "< "  + std::to_string(req.MinCount); break;
+                case regex_builder::NumberCompare::Between: cmp = std::to_string(req.MinCount) + ".." + std::to_string(req.MaxCount); break;
+            }
+            return std::string("Количество: ") + (i >= 1 && i <= 3 ? q[i] : "?") + " " + cmp;
         }
         case regex_builder::SearchType::Comment: {
             std::string mode;
@@ -430,6 +438,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                     auto& h = settings::History[k - 1];
                     pattern = h.Pattern;
                     RestoreRequest(req, h);
+                    hasResults = false;
+                    lastResults.clear();
                     std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
                     if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
                     std::cout << "\n";
@@ -456,6 +466,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 auto& f = settings::Favorites[k - 1];
                 pattern = f.Pattern;
                 RestoreRequest(req, f);
+                hasResults = false;
+                lastResults.clear();
                 std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
                 if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
                 std::cout << "\n";
@@ -495,6 +507,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             auto& h = settings::History[k - 1];
             pattern = h.Pattern;
             RestoreRequest(req, h);
+            hasResults = false;
+            lastResults.clear();
             std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
             if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
@@ -690,26 +704,6 @@ int main() {
             std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
             if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
-        }
-
-        if (isStructure || isCombination) {
-            file_searcher::SearchOptions options;
-            if (prompt::AskSearchOptions(options, req)) {
-                std::cout << "\nПоиск...\n\n";
-                size_t fileCount = 0;
-                size_t skippedCount = 0;
-                auto results = file_searcher::Search(req, pattern, options, &fileCount, &skippedCount);
-                std::cout << "Найдено файлов: " << fileCount << "\n";
-                if (skippedCount > 0) {
-                    std::cout << colors::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << colors::Reset;
-                }
-                std::cout << "\n";
-                ShowResults(results, options, options.ShowFirstN);
-                if ((int)results.size() > options.ShowFirstN) std::cout << "... и ещё " << (results.size() - options.ShowFirstN) << "\n";
-                std::cout << "\n";
-                PrintTotals(results);
-                std::cout << "\n";
-            }
         }
 
         RunActionMenu(req, pattern);
