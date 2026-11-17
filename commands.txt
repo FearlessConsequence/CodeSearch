@@ -1,0 +1,315 @@
+================================================================================
+CodeSearch — шпаргалка по командам
+Windows / macOS / Linux
+================================================================================
+
+СОДЕРЖАНИЕ
+  1. Проверка окружения
+  2. Установка компилятора (если нет)
+  3. Сборка: Makefile
+  4. Сборка: CMake
+  5. Сборка: прямая команда g++/clang++
+  6. Запуск программы и тестов
+  7. Docker (проверка Linux-сборки)
+  8. Git (залить на GitHub)
+  9. Что НЕ надо запускать
+  10. TL;DR
+
+
+================================================================================
+1. ПРОВЕРКА ОКРУЖЕНИЯ
+================================================================================
+
+  Windows (PowerShell):
+    g++ --version
+    make --version
+    cmake --version
+    git --version
+    docker version
+
+  macOS (Terminal):
+    clang++ --version
+    make --version
+    cmake --version
+    git --version
+    docker version
+
+  Linux (bash):
+    g++ --version
+    make --version
+    cmake --version
+    git --version
+    docker version
+
+
+================================================================================
+2. УСТАНОВКА КОМПИЛЯТОРА (если нет)
+================================================================================
+
+  Windows (MinGW, через winget):
+    winget install mingw
+
+  Windows (MSYS2, альтернатива):
+    https://www.msys2.org/ → установить → в MSYS2 shell:
+    pacman -S mingw-w64-x86_64-gcc mingw-w64-x86_64-make
+
+  macOS:
+    xcode-select --install
+
+  Ubuntu / Debian:
+    sudo apt update
+    sudo apt install -y build-essential cmake make git
+
+  Fedora:
+    sudo dnf install -y gcc-c++ cmake make git
+
+  Arch:
+    sudo pacman -S gcc cmake make git
+
+
+================================================================================
+3. СБОРКА: MAKEFILE
+================================================================================
+
+  Во всех ОС (из корня проекта):
+
+    make                 # собрать codesearch
+    make tests           # собрать tests
+    make run             # собрать + запустить codesearch
+    make test-run        # собрать + прогнать tests
+    make clean           # удалить бинарники
+
+  Windows: если "make" не найден — используйте "mingw32-make" (идёт с MinGW):
+    mingw32-make
+    mingw32-make tests
+    mingw32-make clean
+
+
+================================================================================
+4. СБОРКА: CMAKE
+================================================================================
+
+  Вариант A (пошагово):
+
+    mkdir build
+    cd build
+    cmake ..
+    cmake --build .
+
+  Вариант B (одной командой, CMake 3.15+):
+
+    cmake -S . -B build
+    cmake --build build
+
+  Release-сборка (с оптимизацией):
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build
+
+  Debug-сборка (символы, без -O2):
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug
+    cmake --build build
+
+  Принудительно указать компилятор:
+
+    macOS/Linux:
+      cmake -S . -B build -DCMAKE_CXX_COMPILER=clang++
+
+    Windows (MinGW):
+      cmake -S . -B build -G "MinGW Makefiles"
+
+  Пересобрать с нуля:
+
+    macOS/Linux:
+      rm -rf build
+      cmake -S . -B build
+      cmake --build build
+
+    Windows (PowerShell):
+      Remove-Item -Recurse -Force build
+      cmake -S . -B build
+      cmake --build build
+
+  Прогон тестов через ctest:
+
+    ctest --test-dir build --output-on-failure
+
+
+================================================================================
+5. СБОРКА: ПРЯМАЯ КОМАНДА g++ / clang++
+================================================================================
+
+  Windows (MinGW g++):
+
+    g++ -std=c++17 -O2 -o codesearch.exe main.cpp RegexBuilder.cpp FileSearcher.cpp Prompt.cpp
+    g++ -std=c++17 -O2 -o tests.exe tests.cpp RegexBuilder.cpp FileSearcher.cpp
+
+  macOS (clang++):
+
+    clang++ -std=c++17 -O2 -o codesearch main.cpp RegexBuilder.cpp FileSearcher.cpp Prompt.cpp
+    clang++ -std=c++17 -O2 -o tests tests.cpp RegexBuilder.cpp FileSearcher.cpp
+
+  Linux (g++):
+
+    g++ -std=c++17 -O2 -o codesearch main.cpp RegexBuilder.cpp FileSearcher.cpp Prompt.cpp
+    g++ -std=c++17 -O2 -o tests tests.cpp RegexBuilder.cpp FileSearcher.cpp
+
+  С предупреждениями (рекомендуется):
+
+    g++ -std=c++17 -O2 -Wall -Wextra -o codesearch main.cpp RegexBuilder.cpp FileSearcher.cpp Prompt.cpp
+
+
+================================================================================
+6. ЗАПУСК ПРОГРАММЫ И ТЕСТОВ
+================================================================================
+
+  Windows (PowerShell) — ОБЯЗАТЕЛЬНО с ".\":
+
+    .\codesearch.exe
+    .\tests.exe
+
+  Windows (cmd) — можно без ".\":
+
+    codesearch.exe
+    tests.exe
+
+  macOS / Linux — ОБЯЗАТЕЛЬНО с "./":
+
+    ./codesearch
+    ./tests
+
+  Из каталога build/ (CMake):
+
+    cd build
+    .\codesearch.exe    (Windows PowerShell)
+    ./codesearch        (macOS/Linux)
+    ./tests             (macOS/Linux)
+
+
+================================================================================
+7. DOCKER (проверка Linux-сборки)
+================================================================================
+
+  Запустить Docker Desktop (Windows, если не запущен):
+
+    Start-Process "C:\Program Files\Docker\Docker\Docker Desktop.exe"
+
+  Проверить, что Docker жив:
+
+    docker version
+    docker ps
+
+  Собрать образ и прогнать тесты:
+
+    docker build -t codesearch-test .
+    docker run --rm codesearch-test
+
+  Зайти внутрь контейнера (если хочется poke around):
+
+    docker run --rm -it codesearch-test bash
+
+  Пересобрать без кэша:
+
+    docker build --no-cache -t codesearch-test .
+
+  Одной командой без Dockerfile (Ubuntu 22.04):
+
+    docker run --rm -v "$(pwd):/app" -w /app ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y -qq g++ make cmake xclip wl-clipboard > /dev/null && make && make tests && ./tests"
+
+  Windows PowerShell (замена $(pwd)):
+
+    docker run --rm -v "${PWD}:/app" -w /app ubuntu:22.04 bash -c "apt-get update -qq && apt-get install -y -qq g++ make cmake xclip wl-clipboard > /dev/null && make && make tests && ./tests"
+
+  docker-compose (если создали docker-compose.yml):
+
+    docker compose up --build
+    docker compose run --rm tests
+
+
+================================================================================
+8. GIT (залить на GitHub)
+================================================================================
+
+  Создать .gitignore (один раз, в корне проекта):
+
+    build/
+    codesearch
+    codesearch.exe
+    tests
+    tests.exe
+    *.o
+    *.obj
+    .DS_Store
+    all_files.txt
+
+  Инициализация и первый коммит:
+
+    git init
+    git add .
+    git commit -m "CodeSearch: кроссплатформенная сборка (Win/Mac/Linux)"
+
+  Привязать удалённый репозиторий и запушить:
+
+    git remote add origin https://github.com/USER/CodeSearch.git
+    git branch -M main
+    git push -u origin main
+
+  Последующие коммиты:
+
+    git add .
+    git commit -m "описание изменений"
+    git push
+
+
+================================================================================
+9. ЧТО НЕ НАДО ЗАПУСКАТЬ
+================================================================================
+
+  × g++ main.cpp                         — не соберётся, нужен -std=c++17
+  × .\codesearch        (Windows)        — PowerShell не найдёт без .exe
+  × codesearch          (macOS/Linux)    — нужен ./codesearch
+  × docker build        без Docker Desktop — ошибка "failed to connect to docker API"
+  × make                на Windows без MinGW — "'make' is not recognized"
+  × make и cmake одновременно в одной папке без .gitignore — бинарники в двух местах
+
+
+================================================================================
+10. TL;DR — если забыли всё
+================================================================================
+
+  Windows (PowerShell):
+
+    make && make tests && .\tests.exe
+
+  macOS / Linux:
+
+    make && make tests && ./tests
+
+  Через CMake (везде):
+
+    cmake -S . -B build && cmake --build build
+    ctest --test-dir build --output-on-failure
+
+  Linux в Docker:
+
+    docker build -t codesearch-test . && docker run --rm codesearch-test
+
+  Проверить буфер обмена на macOS (после сборки):
+
+    ./codesearch
+    → любой поиск
+    → "2. Скопировать в буфер"
+    → вставить в TextEdit (Cmd+V)
+
+  Проверить буфер обмена на Windows:
+
+    .\codesearch.exe
+    → любой поиск
+    → "2. Скопировать в буфер"
+    → вставить в Блокнот (Ctrl+V)
+
+
+================================================================================
+КОНЕЦ
+================================================================================

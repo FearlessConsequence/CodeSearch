@@ -1,3 +1,5 @@
+
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <filesystem>
@@ -35,6 +37,22 @@ bool CopyToClipboard(const std::string& text) {
     SetClipboardData(CF_UNICODETEXT, hMem);
     CloseClipboard();
     return true;
+#elif defined(__APPLE__)
+    FILE* pipe = popen("pbcopy", "w");
+    if (!pipe) return false;
+    size_t written = fwrite(text.data(), 1, text.size(), pipe);
+    int status = pclose(pipe);
+    return written == text.size() && status == 0;
+#elif defined(__linux__)
+    const char* cmd = nullptr;
+    if (getenv("WAYLAND_DISPLAY"))      cmd = "wl-copy";
+    else if (getenv("DISPLAY"))         cmd = "xclip -selection clipboard";
+    if (!cmd) return false;
+    FILE* pipe = popen(cmd, "w");
+    if (!pipe) return false;
+    size_t written = fwrite(text.data(), 1, text.size(), pipe);
+    int status = pclose(pipe);
+    return written == text.size() && status == 0;
 #else
     (void)text;
     return false;
@@ -51,7 +69,7 @@ std::string ReadClipboard() {
         if (w) {
             int size = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
             if (size > 0) {
-                std::string buf(size, 0);              // size, не size-1 — сюда пишется ровно size байт с '\0'
+                std::string buf(size, 0);
                 WideCharToMultiByte(CP_UTF8, 0, w, -1, &buf[0], size, nullptr, nullptr);
                 buf.resize(size - 1);
                 result = buf;
@@ -61,12 +79,39 @@ std::string ReadClipboard() {
     }
     CloseClipboard();
     return result;
+#elif defined(__APPLE__)
+    FILE* pipe = popen("pbpaste", "r");
+    if (!pipe) return "";
+    std::string result;
+    char buffer[4096];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+        result.append(buffer, n);
+    }
+    pclose(pipe);
+    return result;
+#elif defined(__linux__)
+    const char* cmd = nullptr;
+    if (getenv("WAYLAND_DISPLAY"))      cmd = "wl-paste";
+    else if (getenv("DISPLAY"))         cmd = "xclip -selection clipboard -o";
+    if (!cmd) return "";
+    FILE* pipe = popen(cmd, "r");
+    if (!pipe) return "";
+    std::string result;
+    char buffer[4096];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+        result.append(buffer, n);
+    }
+    pclose(pipe);
+    return result;
 #else
     return "";
 #endif
 }
 
 bool CopyAndRemember(const std::string& text, const std::string& source) {
+    (void)source;   // параметр для совместимости, не используется
     std::string oldText = ReadClipboard();
     bool ok = CopyToClipboard(text);
     if (ok && !oldText.empty() && oldText != text) {

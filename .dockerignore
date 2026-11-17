@@ -1,0 +1,7 @@
+build/
+*.exe
+codesearch
+tests
+.git/
+*.json
+!settings.json

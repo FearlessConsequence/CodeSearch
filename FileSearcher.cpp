@@ -161,7 +161,7 @@ namespace file_searcher {
             size_t pos = it->position();
             int line = lines.At(pos);
             std::string text = TrimmedLineAt(content, pos);
-            results.push_back({file, line, text});
+            results.push_back({file, line, text, ""});
         }
     }
 
@@ -174,7 +174,7 @@ namespace file_searcher {
             size_t pos = (m.size() > 1 && m[1].matched) ? m.position(1) : m.position();
             int line = lines.At(pos);
             std::string text = TrimmedLineAt(content, pos);
-            results.push_back({file, line, text});
+            results.push_back({file, line, text, ""});
         }
     }
 
@@ -194,7 +194,7 @@ namespace file_searcher {
             for (auto& yr : yRanges) if (xs < yr.second && xe > yr.first) { intersects = true; break; }
             if (intersects) continue;
             int line = lines.At(xs);
-            results.push_back({file, line, TrimmedLineAt(content, xs)});
+            results.push_back({file, line, TrimmedLineAt(content, xs), ""});
         }
     }
 
@@ -352,7 +352,7 @@ namespace file_searcher {
                 size_t en = utf8::SafeCut(trimmed, st + 80);
                 trimmed = "..." + trimmed.substr(st, en - st) + "...";
             }
-            results.push_back({file, lineNum, trimmed});
+            results.push_back({file, lineNum, trimmed, ""});
         }
     }
 
@@ -743,7 +743,7 @@ namespace file_searcher {
             auto nextIt = it;
             ++nextIt;
             while (nextIt != std::sregex_iterator() && skipMask[nextIt->position()]) ++nextIt;
-            if (nextIt != std::sregex_iterator() && nextIt->position() < bestOpen) continue;
+            if (nextIt != std::sregex_iterator() && (size_t)nextIt->position() < bestOpen) continue;
 
             seenOpens.insert(bestOpen);
 
@@ -756,7 +756,7 @@ namespace file_searcher {
             if (!MatchesEmptyMetric(inner, req)) continue;
 
             int line = lines.At((size_t)it->position());
-            results.push_back({file, line, TrimmedLineAt(content, (size_t)it->position())});
+            results.push_back({file, line, TrimmedLineAt(content, (size_t)it->position()), ""});
         }
     }
 

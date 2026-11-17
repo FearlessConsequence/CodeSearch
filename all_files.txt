@@ -1,4 +1,4 @@
-# Собрано 2026-11-15 10:02:16
+# Собрано 2026-11-17 06:35:05
 # Всего файлов: 20
 ======================================================================
 
@@ -1279,6 +1279,7 @@ namespace file_searcher {
             // то этот блок принадлежит ему, а не текущему (например, if (a) if (b) {}).
             auto nextIt = it;
             ++nextIt;
+            while (nextIt != std::sregex_iterator() && skipMask[nextIt->position()]) ++nextIt;
             if (nextIt != std::sregex_iterator() && nextIt->position() < bestOpen) continue;
 
             seenOpens.insert(bestOpen);
@@ -5444,6 +5445,15 @@ struct TempDir {
         std::ofstream out(path / name, std::ios::binary);
         out << content;
     }
+    void WritePath(const std::string& rel, const std::string& content) const {
+        fs::path p = path / rel;
+        if (p.has_parent_path() && p.parent_path() != path) {
+            std::error_code ec;
+            fs::create_directories(p.parent_path(), ec);
+        }
+        std::ofstream out(p, std::ios::binary);
+        out << content;
+    }
 };
 
 static file_searcher::SearchOptions MakeOptions(const fs::path& dir) {
@@ -5737,6 +5747,24 @@ static void Test_Int_EmptyBlocks() {
     if (!res.empty()) CHECK_EQ(res[0].Line, 1);
 }
 
+static void Test_Int_EmptyBlocks_XInComment() {
+    Section("Int: EmptyBlocks (regression: X in comment)");
+    TempDir t; t.Write("test.cs",
+        "if (x) // if (y)\n"
+        "{ }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "if";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::StrictlyEmpty;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
 // ============================================================
 // Integration: Comments — StartLine
 // ============================================================
@@ -5810,6 +5838,428 @@ static void Test_Int_ArgsLength() {
 }
 
 // ============================================================
+// Integration: EmptyBlocks — else / else if
+// ============================================================
+
+static void Test_Int_EmptyBlocks_ElseIf() {
+    Section("Int: EmptyBlocks (else / else if)");
+    TempDir t; t.Write("test.cs",
+        "if (x) { }\n"
+        "else if (y) { }\n"
+        "else { }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "else";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::StrictlyEmpty;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // `else if (y) { }` отсекается специальной проверкой; `else { }` находится.
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 3);
+}
+
+// ============================================================
+// Integration: EmptyBlocks — metric MaxChars
+// ============================================================
+
+static void Test_Int_EmptyBlocks_MaxChars() {
+    Section("Int: EmptyBlocks (MaxChars 3)");
+    TempDir t; t.Write("test.cs",
+        "if (a) { }\n"
+        "if (b) { x; }\n"
+        "if (c) { xy; }\n"
+        "if (d) { xyz; }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "if";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::MaxChars;
+    req.EmptyMaxCount = 3;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // a: 0 non-ws, b: 2, c: 3, d: 4 → d не проходит
+    CHECK_EQ((int)res.size(), 3);
+}
+
+// ============================================================
+// Integration: EmptyBlocks — metric MaxLines
+// ============================================================
+
+static void Test_Int_EmptyBlocks_MaxLines() {
+    Section("Int: EmptyBlocks (MaxLines 0)");
+    TempDir t; t.Write("test.cs",
+        "if (a) { }\n"
+        "if (b) {\n"
+        "}\n"
+        "if (c) {\n"
+        "\n"
+        "}\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "if";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::MaxLines;
+    req.EmptyMaxCount = 0;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // a: 0 \n, b: 1 \n, c: 2 \n → только a
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: EmptyBlocks — catch
+// ============================================================
+
+static void Test_Int_EmptyBlocks_Catch() {
+    Section("Int: EmptyBlocks (catch)");
+    TempDir t; t.Write("test.cs",
+        "catch { }\n"
+        "catch (Exception) { }\n"
+        "catch (Exception ex) { throw; }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XEmpty;
+    req.X = "catch";
+    req.EmptyMetricValue = regex_builder::EmptyMetric::StrictlyEmpty;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // Первые два пустые, третий содержит throw
+    CHECK_EQ((int)res.size(), 2);
+}
+
+// ============================================================
+// Integration: ArgsLength — шаблонные вызовы
+// ============================================================
+
+static void Test_Int_ArgsLength_Template() {
+    Section("Int: ArgsLength (template)");
+    TempDir t; t.Write("test.cs",
+        "Foo<int>(1, 2);\n"
+        "Foo<Bar<int>>(a, b, c);\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Greater;
+    req.MinCount = 0;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    if (res.size() == 2) {
+        CHECK_EQ(res[0].Kind, std::string("call"));
+        CHECK_EQ(res[1].Kind, std::string("call"));
+    }
+}
+
+// ============================================================
+// Integration: ArgsLength — p->foo
+// ============================================================
+
+static void Test_Int_ArgsLength_Arrow() {
+    Section("Int: ArgsLength (->)");
+    TempDir t; t.Write("test.cs", "p->foo(1, 2);\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Equal;
+    req.MinCount = 2;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Kind, std::string("call"));
+}
+
+// ============================================================
+// Integration: ArgsLength — 0 аргументов
+// ============================================================
+
+static void Test_Int_ArgsLength_Zero() {
+    Section("Int: ArgsLength (0)");
+    TempDir t; t.Write("test.cs",
+        "foo();\n"
+        "bar(1);\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Equal;
+    req.MinCount = 0;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: ArgsLength — вложенность
+// ============================================================
+
+static void Test_Int_ArgsLength_Nested() {
+    Section("Int: ArgsLength (nested)");
+    TempDir t; t.Write("test.cs", "foo(bar(baz(1)));\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Equal;
+    req.MinCount = 1;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // Все три (foo/bar/baz) имеют по 1 аргументу
+    CHECK_EQ((int)res.size(), 3);
+}
+
+// ============================================================
+// Integration: ArgsLength — keyword skip
+// ============================================================
+
+static void Test_Int_ArgsLength_Keyword() {
+    Section("Int: ArgsLength (keyword skip)");
+    TempDir t; t.Write("test.cs",
+        "if (x) { }\n"
+        "while (y) { }\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Quantity;
+    req.Quantity = regex_builder::QuantityType::ArgsLength;
+    req.NumberCompareValue = regex_builder::NumberCompare::Greater;
+    req.MinCount = 0;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 0);
+}
+
+// ============================================================
+// Integration: Comments — блочный
+// ============================================================
+
+static void Test_Int_Comments_Block() {
+    Section("Int: Comments (block)");
+    TempDir t; t.Write("test.cs",
+        "/* TODO: fix */\n"
+        "int x = 5;\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: Comments — // внутри строки
+// ============================================================
+
+static void Test_Int_Comments_InString() {
+    Section("Int: Comments (in string)");
+    TempDir t; t.Write("test.cs",
+        "string s = \"// TODO: not a comment\";\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 0);
+}
+
+// ============================================================
+// Integration: Comments — регистрозависимость
+// ============================================================
+
+static void Test_Int_Comments_CaseSensitive() {
+    Section("Int: Comments (case)");
+    TempDir t; t.Write("test.cs",
+        "// todo: fix\n"
+        "// TODO: fix\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+    req.CommentWord = "TODO";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // "// todo" не находит (регистрозависимо)
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 2);
+}
+
+// ============================================================
+// Integration: Comments — слово внутри
+// ============================================================
+
+static void Test_Int_Comments_Word() {
+    Section("Int: Comments (word)");
+    TempDir t; t.Write("test.cs",
+        "// hello world\n"
+        "// goodbye world\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+    req.CommentWord = "hello";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: StructureXYZ — многострочный
+// ============================================================
+
+static void Test_Int_StructureXYZ_MultiLine() {
+    Section("Int: StructureXYZ (multiline)");
+    TempDir t; t.Write("test.cs", "a\nb\nc\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XAnywhereBeforeYBeforeZ;
+    req.X = "a"; req.Y = "b"; req.Z = "c";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    // StructureXYZ показывает строку Y → строка 2
+    if (!res.empty()) CHECK_EQ(res[0].Line, 2);
+}
+
+// ============================================================
+// Integration: StructureXYZ — нет Z
+// ============================================================
+
+static void Test_Int_StructureXYZ_NoMatch() {
+    Section("Int: StructureXYZ (no Z)");
+    TempDir t; t.Write("test.cs", "a b\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Structure;
+    req.Structure = regex_builder::StructureType::XAnywhereBeforeYBeforeZ;
+    req.X = "a"; req.Y = "b"; req.Z = "c";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 0);
+}
+
+// ============================================================
+// Integration: XButNotY по позиции — без пересечения
+// ============================================================
+
+static void Test_Int_XButNotY_ByPos_NoOverlap() {
+    Section("Int: X но не Y (no overlap)");
+    TempDir t; t.Write("test.cs", "foo(bar);\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Combination;
+    req.Combination = regex_builder::CombinationType::XButNotY;
+    req.XButNotYModeValue = regex_builder::XButNotYMode::ByPosition;
+    req.X = "foo";
+    req.Y = "bar";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // foo и bar рядом, но не пересекаются → foo находится
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) CHECK_EQ(res[0].Line, 1);
+}
+
+// ============================================================
+// Integration: MatchCount в XOrY
+// ============================================================
+
+static void Test_Int_MatchCount_XOrY() {
+    Section("Int: MatchCount (XOrY)");
+    TempDir t; t.Write("test.cs",
+        "foo bar\n"
+        "foo baz\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Combination;
+    req.Combination = regex_builder::CombinationType::XOrY;
+    req.X = "foo, bar";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    // foo, bar, foo — три отдельных результата, каждый MatchCount=1
+    CHECK_EQ((int)res.size(), 3);
+    for (const auto& r : res) CHECK_EQ(r.MatchCount, 1);
+}
+
+// ============================================================
+// Integration: MatchCount в Comments
+// ============================================================
+
+static void Test_Int_MatchCount_Comments() {
+    Section("Int: MatchCount (Comments)");
+    TempDir t; t.Write("test.cs",
+        "// a\n"
+        "// b\n");
+    auto opts = MakeOptions(t.path);
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Comment;
+    req.Comment = regex_builder::CommentType::StartLine;
+    req.Language = "C#";
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 2);
+    for (const auto& r : res) CHECK_EQ(r.MatchCount, 1);
+}
+
+
+// ============================================================
+// Integration: ExcludeFiles маска
+// ============================================================
+
+static void Test_Int_ExcludeFiles() {
+    Section("Int: ExcludeFiles mask");
+    TempDir t;
+    t.Write("a.cs",     "foo\n");
+    t.Write("b.g.cs",   "foo\n");
+    auto opts = MakeOptions(t.path);
+    opts.ExcludeFiles = {"*.g.cs"};
+
+    regex_builder::SearchRequest req;
+    req.Type = regex_builder::SearchType::Word;
+    req.Word = "foo";
+    req.WordWholeOnly = false;
+
+    auto res = file_searcher::Search(req, regex_builder::Build(req), opts);
+    CHECK_EQ((int)res.size(), 1);
+    if (!res.empty()) {
+        std::string rel = utf8::ToUtf8(fs::relative(res[0].File, t.path));
+        CHECK_EQ(rel, std::string("a.cs"));
+    }
+}
+
+// ============================================================
 // main
 // ============================================================
 
@@ -5841,10 +6291,30 @@ int main() {
     Test_Int_StructureXYZ();
     Test_Int_XButNotY_ByPos();
     Test_Int_XButNotY_ByLine();
-    Test_Int_EmptyBlocks();
+        Test_Int_EmptyBlocks();
+    Test_Int_EmptyBlocks_XInComment();
+    Test_Int_EmptyBlocks_ElseIf();
+    Test_Int_EmptyBlocks_MaxChars();
+    Test_Int_EmptyBlocks_MaxLines();
+    Test_Int_EmptyBlocks_Catch();
     Test_Int_Comments_StartLine();
     Test_Int_Comments_EndLine();
+    Test_Int_Comments_Block();
+    Test_Int_Comments_InString();
+    Test_Int_Comments_CaseSensitive();
+    Test_Int_Comments_Word();
     Test_Int_ArgsLength();
+    Test_Int_ArgsLength_Template();
+    Test_Int_ArgsLength_Arrow();
+    Test_Int_ArgsLength_Zero();
+    Test_Int_ArgsLength_Nested();
+    Test_Int_ArgsLength_Keyword();
+    Test_Int_StructureXYZ_MultiLine();
+    Test_Int_StructureXYZ_NoMatch();
+    Test_Int_XButNotY_ByPos_NoOverlap();
+    Test_Int_MatchCount_XOrY();
+    Test_Int_MatchCount_Comments();
+    Test_Int_ExcludeFiles();
 
     std::cout << "\n========================================\n";
     std::cout << "Passed: " << g_passed << ", Failed: " << g_failed << "\n";
