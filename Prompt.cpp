@@ -113,7 +113,7 @@ namespace prompt {
             req.Word = ReadLine("Введите слово (0 — назад): ");
             if (GoBack) return false;
             if (!req.Word.empty()) break;
-            std::cout << colors::Error << "Слово не может быть пустым." << colors::Reset << "\n";
+            std::cout << theme::Role::Error << "Слово не может быть пустым." << theme::Role::Reset << "\n";
         }
 
         auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да, 0 — назад): ");
@@ -128,13 +128,13 @@ namespace prompt {
     // ============ ТИП 2 ============
 
     static bool AskFormat(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать?\n";
-        std::cout << "  1. Email\n";
-        std::cout << "  2. URL\n";
-        std::cout << "  3. IP-адрес\n";
-        std::cout << "  4. GUID\n";
-        std::cout << "  5. Дата (2024-05-12)\n";
-        std::cout << "  0. Назад\n> ";
+        std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+        std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Email\n";
+        std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " URL\n";
+        std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " IP-адрес\n";
+        std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " GUID\n";
+        std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Дата (2024-05-12)\n";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
         req.Format = (patterns::FormatType)ReadInt(1, 5);
         return !GoBack;
     }
@@ -143,19 +143,19 @@ namespace prompt {
 
     static bool AskStructure(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что искать?\n";
-            std::cout << "  1. X, внутри которого пусто\n";
-            std::cout << "  2. X, потом что угодно, потом Y, потом что угодно, потом Z\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X, внутри которого пусто\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " X, потом что угодно, потом Y, потом что угодно, потом Z\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
             req.Structure = (regex_builder::StructureType)ReadInt(1, 2);
             if (GoBack) return false;
 
             if (req.Structure == regex_builder::StructureType::XEmpty) {
-                std::cout << "Выберите параметр:\n";
-                std::cout << "  1. Строго пусто\n";
-                std::cout << "  2. Не более N символов без пробелов\n";
-                std::cout << "  3. Не более N строк\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Выберите параметр:\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Строго пусто\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Не более N символов без пробелов\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Не более N строк\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
                 req.EmptyMetricValue = (regex_builder::EmptyMetric)ReadInt(1, 3);
                 if (GoBack) continue;
 
@@ -169,7 +169,7 @@ namespace prompt {
                     req.X = ReadLine("Название оператора (0 — назад): ");
                     if (GoBack) break;
                     if (!req.X.empty()) return true;
-                    std::cout << colors::Error << "Не может быть пустым." << colors::Reset << "\n";
+                    std::cout << theme::Role::Error << "Не может быть пустым." << theme::Role::Reset << "\n";
                 }
                 if (GoBack) continue;
                 return true;
@@ -177,10 +177,10 @@ namespace prompt {
 
             else {
                 while (true) {
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                         << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                         << " ^ — начало строки, $ — конец строки)"
-                        << colors::Reset << "\n";
+                        << theme::Role::Reset << "\n";
 
                     req.X = ReadLine("X (0 — назад): ");
                     if (GoBack) break;
@@ -191,15 +191,15 @@ namespace prompt {
 
                     bool ok = true;
                     if (req.X.empty()) {
-                        std::cout << colors::Error << "X пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "X пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (req.Y.empty()) {
-                        std::cout << colors::Error << "Y пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Y пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (req.Z.empty()) {
-                        std::cout << colors::Error << "Z пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Z пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (ok) return true;
@@ -213,24 +213,24 @@ namespace prompt {
 
     static bool AskCombination(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что искать?\n";
-            std::cout << "  1. X, но не Y\n";
-            std::cout << "  2. X или Y или Z\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X, но не Y\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " X или Y или Z\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
             req.Combination = (regex_builder::CombinationType)ReadInt(1, 2);
             if (GoBack) return false;
 
             if (req.Combination == regex_builder::CombinationType::XOrY) {
                 while (true) {
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                               << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                               << " ^ — начало строки, $ — конец строки.\n"
                               << " Если элемент содержит запятую — возьмите его в кавычки \"...\" или '...')"
-                              << colors::Reset << "\n";
+                              << theme::Role::Reset << "\n";
                     req.X = ReadLine("Элементы через запятую (0 — назад): ");
                     if (GoBack) break;
                     if (!QuotesBalanced(req.X)) {
-                        std::cout << colors::Error << "Кавычки не закрыты. Попробуйте снова." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Кавычки не закрыты. Попробуйте снова." << theme::Role::Reset << "\n";
                         continue;
                     }
                     bool hasItem = false;
@@ -238,7 +238,7 @@ namespace prompt {
                         if (!std::isspace((unsigned char)c) && c != ',' && c != '"' && c != '\'') { hasItem = true; break; }
                     }
                     if (!hasItem) {
-                        std::cout << colors::Error << "Нужен хотя бы один элемент." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Нужен хотя бы один элемент." << theme::Role::Reset << "\n";
                         continue;
                     }
                     return true;
@@ -248,25 +248,25 @@ namespace prompt {
             else {
                 bool backToTop = false;
                 while (true) {
-                    std::cout << "Как сравнивать X и Y?\n";
-                    std::cout << "  1. X не пересекается с Y (по позиции)\n";
-                    std::cout << "  2. В строке с X нет Y (по строке)\n";
-                    std::cout << "  0. Назад\n> ";
+                    std::cout << theme::Role::Question << "Как сравнивать X и Y?\n" << theme::Role::Reset;
+                    std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X не пересекается с Y (по позиции)\n";
+                    std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " В строке с X нет Y (по строке)\n";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
                     req.XButNotYModeValue = (regex_builder::XButNotYMode)ReadInt(1, 2);
                     if (GoBack) { backToTop = true; break; }
 
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                               << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                               << " ^ — начало строки, $ — конец строки)"
-                              << colors::Reset << "\n";
+                              << theme::Role::Reset << "\n";
                     bool backToSub = false;
                     while (true) {
                         req.X = ReadLine("X (0 — назад): ");
                         if (GoBack) { backToSub = true; break; }
                         req.Y = ReadLine("Y (0 — назад): ");
                         if (GoBack) { backToSub = true; break; }
-                        if (req.X.empty()) { std::cout << colors::Error << "X пуст." << colors::Reset << "\n"; continue; }
-                        if (req.Y.empty()) { std::cout << colors::Error << "Y пуст." << colors::Reset << "\n"; continue; }
+                        if (req.X.empty()) { std::cout << theme::Role::Error << "X пуст." << theme::Role::Reset << "\n"; continue; }
+                        if (req.Y.empty()) { std::cout << theme::Role::Error << "Y пуст." << theme::Role::Reset << "\n"; continue; }
                         req.Exclude = req.Y;
                         return true;
                     }
@@ -281,20 +281,20 @@ namespace prompt {
 
     static bool AskQuantity(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что ограничить?\n";
-            std::cout << "  1. Количество цифр в числе\n";
-            std::cout << "  2. Длина строки\n";
-            std::cout << "  3. Длина списка аргументов\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Что ограничить?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Количество цифр в числе\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Длина строки\n";
+            std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Длина списка аргументов\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
             req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
             if (GoBack) return false;
 
-            std::cout << "Как сравнивать?\n";
-            std::cout << "  1. Больше N\n";
-            std::cout << "  2. Равно N\n";
-            std::cout << "  3. Меньше N\n";
-            std::cout << "  4. В диапазоне\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Как сравнивать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Больше N\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Равно N\n";
+            std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Меньше N\n";
+            std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " В диапазоне\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
             req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
             if (GoBack) continue;
 
@@ -318,17 +318,17 @@ namespace prompt {
     // ============ ТИП 6 ============
 
     static bool AskComment(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать в комментариях?\n";
-        std::cout << "  1. В начале строки\n";
-        std::cout << "  2. В конце строки\n";
-        std::cout << "  3. Все комментарии\n";
-        std::cout << "  0. Назад\n> ";
+        std::cout << theme::Role::Question << "Что искать в комментариях?\n" << theme::Role::Reset;
+        std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " В начале строки\n";
+        std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " В конце строки\n";
+        std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Все комментарии\n";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
         req.Comment = (regex_builder::CommentType)ReadInt(1, 3);
         if (GoBack) return false;
 
         // Выбор языка
         if (settings::FavoriteLanguages.empty()) {
-            std::cout << colors::Error << "Нет доступных языков в настройках." << colors::Reset << "\n";
+            std::cout << theme::Role::Error << "Нет доступных языков в настройках." << theme::Role::Reset << "\n";
             return false;
         }
         std::cout << "\nВыберите язык:\n";
@@ -357,17 +357,18 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что искать?\n";
-                std::cout << "  1. Структура\n";
-                std::cout << "  2. Комбинирование\n";
-                std::cout << "  3. Количество\n";
-                std::cout << "  4. Формат (email, URL, IP, GUID, дата)\n";
-                std::cout << "  5. Комментарии\n";
-                std::cout << "  6. Слово с границами\n";
-                std::cout << "  7. Избранное\n";
-                std::cout << "  8. История поисков\n";
-                std::cout << "  9. История буфера\n";
-                std::cout << "  0. Настройки\n> ";
+                std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Структура\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Комбинирование\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Количество\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Формат (email, URL, IP, GUID, дата)\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Комментарии\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Слово с границами\n";
+                std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Избранное\n";
+                std::cout << "  " << theme::Role::MenuNum << "8." << theme::Role::Default << " История поисков\n";
+                std::cout << "  " << theme::Role::MenuNum << "9." << theme::Role::Default << " История буфера\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Настройки\n";
+                std::cout << "  " << theme::Role::MenuNum << "help" << theme::Role::Default << " — справка\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -488,12 +489,12 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что сделать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -585,10 +586,10 @@ namespace prompt {
         while (true) {
             if (printMenu) {
                 std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -681,10 +682,10 @@ namespace prompt {
         while (true) {
             if (printMenu) {
                 std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -779,10 +780,10 @@ namespace prompt {
         while (true) {
             if (printMenu) {
                 std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -866,8 +867,8 @@ namespace prompt {
         while (true) {
             if (printMenu) {
                 std::cout << "\n=== ВЫВОД ===\n\n";
-                std::cout << "  1. Показывать первых: " << settings::ShowFirstN << "\n";
-                std::cout << "  2. Файл результатов: " << settings::ResultsFile << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Показывать первых: " << settings::ShowFirstN << "";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Файл результатов: " << settings::ResultsFile << "";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -923,10 +924,10 @@ namespace prompt {
         while (true) {
             if (printMenu) {
                 std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить язык\n";
-                std::cout << "  2. Изменить язык\n";
-                std::cout << "  3. Удалить язык\n";
-                std::cout << "  4. Сменить язык по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить язык";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить язык";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить язык";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить язык по умолчанию";
                 std::cout << "  0. Назад\n> ";
                 printMenu = false;
             } else {
@@ -1008,14 +1009,14 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "\n=== НАСТРОЙКИ ===\n\n";
-                std::cout << "  1. Расширения по языкам\n";
-                std::cout << "  2. Исключённые папки\n";
-                std::cout << "  3. Исключённые файлы\n";
-                std::cout << "  4. Максимальный размер файла\n";
-                std::cout << "  5. Вывод\n";
-                std::cout << "  6. Языки\n";
-                std::cout << "  0. Сохранить и выйти\n> ";
+                std::cout << "\n" << theme::Role::Title << "=== НАСТРОЙКИ ===\n\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Расширения по языкам\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Исключённые папки\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Исключённые файлы\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Максимальный размер файла\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Вывод\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Языки\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Сохранить и выйти\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -1086,18 +1087,17 @@ namespace prompt {
                 }
 
                 std::cout << "\n";
-                std::cout << "Измените параметры поиска:\n";
-                std::cout << "  1. Начать поиск\n";
-                std::cout << "  2. Директория: " << dirLabel << "\n";
-                std::cout << "  3. Расширения: " << FormatSet(opt.Extensions) << "\n";
-                std::cout << "  4. Исключённые папки: " << FormatSet(opt.ExcludeDirs) << "\n";
-                std::cout << "  5. Исключённые файлы: " << FormatSet(opt.ExcludeFiles) << "\n";
-                std::cout << "  6. Максимальный размер: "
-                    << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ")
-                    << "\n";
+                std::cout << theme::Role::Question << "Измените параметры поиска:\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Начать поиск\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Директория: " << theme::Role::FileName << dirLabel << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Расширения: " << theme::Role::FileName << FormatSet(opt.Extensions) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Исключённые папки: " << theme::Role::FileName << FormatSet(opt.ExcludeDirs) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Исключённые файлы: " << theme::Role::FileName << FormatSet(opt.ExcludeFiles) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Максимальный размер: " 
+                    << theme::Role::FileName << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ") << "\n";
                 if (req.Type == regex_builder::SearchType::Comment)
-                    std::cout << "  7. Язык: " << req.Language << "\n";
-                std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Язык: " << theme::Role::FileName << req.Language << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Отмена\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -1132,7 +1132,7 @@ namespace prompt {
                     if (fs::exists(dirPath) && fs::is_directory(dirPath))
                         opt.Directory = dirPath;
                     else
-                        std::cout << colors::Error << "Директория не найдена: " << dir << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Директория не найдена: " << dir << theme::Role::Reset << "\n";
                 }
             }
 

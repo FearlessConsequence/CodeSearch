@@ -125,7 +125,7 @@ static std::string PluralMatches(int n);
 
 void ShowResults(const std::vector<file_searcher::SearchResult>& results, const file_searcher::SearchOptions& options, int limit) {
     if (results.empty()) {
-        std::cout << colors::Dim << "(ничего не найдено)" << colors::Reset << "\n";
+        std::cout << theme::Role::Dim << "(ничего не найдено)" << theme::Role::Reset << "\n";
         return;
     }
     size_t shown = std::min((size_t)limit, results.size());
@@ -133,12 +133,12 @@ void ShowResults(const std::vector<file_searcher::SearchResult>& results, const 
         std::string rel;
         try { rel = ToUtf8(fs::relative(results[i].File, options.Directory)); }
         catch (...) { rel = ToUtf8(results[i].File); }
-        std::cout << colors::File << rel << colors::Reset << ":" << colors::LineNumber << results[i].Line << colors::Reset << ": ";
+        std::cout << theme::Role::FileName << rel << theme::Role::Reset << ":" << theme::Role::LineNumber << results[i].Line << theme::Role::Reset << ": ";
         if (!results[i].Kind.empty()) std::cout << "[" << results[i].Kind << "] ";
-                std::cout << colors::MatchText << results[i].Text << colors::Reset;
+                std::cout << theme::Role::Match << results[i].Text << theme::Role::Reset;
         if (results[i].MatchCount > 1)
-            std::cout << colors::Dim << " (" << results[i].MatchCount << " "
-                      << PluralMatches(results[i].MatchCount) << ")" << colors::Reset;
+            std::cout << theme::Role::Dim << " (" << results[i].MatchCount << " "
+                      << PluralMatches(results[i].MatchCount) << ")" << theme::Role::Reset;
         std::cout << "\n"; 
     }
 }
@@ -160,12 +160,14 @@ void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
     }
     int files = (int)uniqueFiles.size();
     int count = (int)results.size();
-    std::cout << colors::Totals << "Найдено в файлах: " << files << colors::Reset << "\n";
-    std::string color;
-    if (count < 100) color = colors::Totals;
-    else if (count < 500) color = colors::Warning;
-    else color = colors::Error;
-    std::cout << color << "Всего найдено: " << count << colors::Reset << "\n";
+    
+    std::cout << theme::Role::Question << "Найдено в файлах: " << theme::Role::StatValue << files << theme::Role::Reset << "\n";
+    
+    theme::Role countColor = theme::Role::StatValue;
+    if (count >= 500) countColor = theme::Role::Error;
+    else if (count >= 100) countColor = theme::Role::Warning;
+    
+    std::cout << theme::Role::Question << "Всего найдено: " << countColor << count << theme::Role::Reset << "\n";
 }
 
 static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
@@ -320,20 +322,20 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Fa
 }
 
 static void ShowHistoryList() {
-    std::cout << "\n=== ИСТОРИЯ ===\n\n";
+    std::cout << "\n" << theme::Role::Title << "=== ИСТОРИЯ ===\n\n" << theme::Role::Reset;
     size_t N = settings::History.size();
     for (size_t i = N; i > 0; --i) {
-        std::cout << "  " << i << ". " << settings::History[i - 1].Description << "\n";
-        std::cout << "     " << settings::History[i - 1].Pattern << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << i << "." << theme::Role::Reset << " " << settings::History[i - 1].Description << "\n";
+        std::cout << "     " << theme::Role::Match << settings::History[i - 1].Pattern << theme::Role::Reset << "\n\n";
     }
 }
 
 static void ShowFavoritesList() {
-    std::cout << "\n=== ИЗБРАННОЕ ===\n\n";
+    std::cout << "\n" << theme::Role::Title << "=== ИЗБРАННОЕ ===\n\n" << theme::Role::Reset;
     size_t N = settings::Favorites.size();
     for (size_t i = N; i > 0; --i) {
-        std::cout << "  " << i << ". " << settings::Favorites[i - 1].Name << "\n";
-        std::cout << "     " << settings::Favorites[i - 1].Pattern << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << i << "." << theme::Role::Reset << " " << settings::Favorites[i - 1].Name << "\n";
+        std::cout << "     " << theme::Role::Match << settings::Favorites[i - 1].Pattern << theme::Role::Reset << "\n\n";
     }
 }
 
@@ -380,17 +382,17 @@ static bool SaveResultsToFile(const std::vector<file_searcher::SearchResult>& re
 }
 
 void PrintActionMenu(bool isInFavorites, bool hasResults) {
-    std::cout << colors::MenuHeader << "Выберите действие:" << colors::Reset << "\n";
-    std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Изменить условия\n";
-    std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Скопировать в буфер\n";
-    std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Начать поиск\n";
-    std::cout << "  " << colors::MenuNumber << "4." << colors::Reset << " Избранное\n";
-    std::cout << "  " << colors::MenuNumber << "5." << colors::Reset << " Добавить в избранное\n";
-    std::cout << "  " << colors::MenuNumber << "6." << colors::Reset << " История поисков\n";
-    std::cout << "  " << colors::MenuNumber << "7." << colors::Reset << " История буфера\n";
-    std::cout << "  " << colors::MenuNumber << "8." << colors::Reset << " Настройки\n";
-    if (isInFavorites) std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Удалить из избранного\n";
-    if (hasResults)   std::cout << "  " << colors::MenuNumber << "9." << colors::Reset << " Выписать в файл\n";
+    std::cout << theme::Role::Question << "Выберите действие:\n" << theme::Role::Reset;
+    std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Изменить условия\n";
+    std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Скопировать в буфер\n";
+    std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Начать поиск\n";
+    std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Избранное\n";
+    std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Добавить в избранное\n";
+    std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " История поисков\n";
+    std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " История буфера\n";
+    std::cout << "  " << theme::Role::MenuNum << "8." << theme::Role::Default << " Настройки\n";
+    if (isInFavorites) std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Удалить из избранного\n";
+    if (hasResults)   std::cout << "  " << theme::Role::MenuNum << "9." << theme::Role::Default << " Выписать в файл\n";
     std::cout << "> ";
 }
 
@@ -444,13 +446,12 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
         else if (choice == "3") {
             file_searcher::SearchOptions options;
             if (!prompt::AskSearchOptions(options, req)) continue;
-            std::cout << "\nПоиск...\n\n";
             size_t fileCount = 0;
             size_t skippedCount = 0;
             auto results = file_searcher::Search(req, pattern, options, &fileCount, &skippedCount);
             std::cout << "Найдено файлов: " << fileCount << "\n";
             if (skippedCount > 0) {
-                std::cout << colors::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << colors::Reset;
+                std::cout << theme::Role::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << theme::Role::Reset;
             }
             std::cout << "\n";
             ShowResults(results, options, options.ShowFirstN);
@@ -466,8 +467,8 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
         else if (choice == "4") {
             if (settings::Favorites.empty()) {
                 std::cout << "\nИзбранное пусто.\n";
-                std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Перейти в историю поисков\n";
-                std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Reset << " Перейти в историю поисков\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Назад\n> ";
                 std::string sub;
                 std::getline(std::cin, sub);
                 size_t sa = sub.find_first_not_of(" \t\r\n");
@@ -485,7 +486,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                     RestoreRequest(req, h);
                     hasResults = false;
                     lastResults.clear();
-                    std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+                    std::cout << "\nВаше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
                     if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
                     std::cout << "\n";
                 }
@@ -494,9 +495,9 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             }
             ShowFavoritesList();
             std::cout << "Выберите действие:\n";
-            std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Перейти в поиск по элементу\n";
-            std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Удалить из избранного\n";
-            std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Reset << " Перейти в поиск по элементу\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Reset << " Удалить из избранного\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Назад\n> ";
             std::string sub;
             std::getline(std::cin, sub);
             size_t sa = sub.find_first_not_of(" \t\r\n");
@@ -513,7 +514,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 RestoreRequest(req, f);
                 hasResults = false;
                 lastResults.clear();
-                std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+                std::cout << "\nВаше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
                 if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
                 std::cout << "\n";
             } else if (sub == "2") {
@@ -554,7 +555,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             RestoreRequest(req, h);
             hasResults = false;
             lastResults.clear();
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+            std::cout << "\nВаше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
             if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
         }
@@ -575,10 +576,10 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
 
             while (true) {
                 std::cout << "\nВыписать результаты в файл:\n";
-                std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Сохранить\n";
-                std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Название файла: " << saveFile << "\n";
-                std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Директория: " << utf8::ToUtf8(saveDir) << "\n";
-                std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Reset << " Сохранить\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Reset << " Название файла: " << saveFile << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Reset << " Директория: " << utf8::ToUtf8(saveDir) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Назад\n> ";
 
                 std::string sub;
                 std::getline(std::cin, sub);
@@ -602,7 +603,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                         std::cout << "\nСохранено в " << utf8::ToUtf8(fullPath) << " (" << lastResults.size() << " строк).\n\n";
                         break;
                     } else {
-                        std::cout << colors::Error << "Не удалось сохранить файл.\n" << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Не удалось сохранить файл.\n" << theme::Role::Reset << "\n";
                     }
                 }
                 else if (sub == "2") {
@@ -617,7 +618,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                     } else {
                         fs::path newDir = utf8::FromUtf8(dir);
                         if (fs::exists(newDir) && fs::is_directory(newDir)) saveDir = newDir;
-                        else std::cout << colors::Error << "Директория не найдена.\n" << colors::Reset << "\n";
+                        else std::cout << theme::Role::Error << "Директория не найдена.\n" << theme::Role::Reset << "\n";
                     }
                 }
             }
@@ -657,6 +658,7 @@ int main() {
 #endif
 
     settings::Load("settings.json");
+    theme::SetTestTheme();
     settings::LoadHistory();
     settings::LoadFavorites();
     settings::LoadClipboardHistory();
@@ -676,7 +678,7 @@ int main() {
             auto& h = settings::History[k - 1];
             std::string pattern = h.Pattern;
             RestoreRequest(req, h);
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+            std::cout << "\nВаше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
             if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
             RunActionMenu(req, pattern);
@@ -693,7 +695,7 @@ int main() {
             auto& f = settings::Favorites[k - 1];
             std::string pattern = f.Pattern;
             RestoreRequest(req, f);
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+            std::cout << "\nВаше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
             if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
             RunActionMenu(req, pattern);
@@ -733,7 +735,7 @@ int main() {
             } else if (isComments) {
                 std::cout << "  (специальный режим: поиск по комментариям, regex не используется)\n\n";
             } else {
-                std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+                std::cout << "  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
                 if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
                 std::cout << "\n";
             }
@@ -746,7 +748,7 @@ int main() {
 
         if (isStructureXYZ || isCombinationXOrY) {
             std::cout << "\nВаше выражение:\n";
-            std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
+            std::cout << "  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
             if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
             std::cout << "\n";
         }

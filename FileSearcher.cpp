@@ -832,7 +832,7 @@ namespace file_searcher {
         bool usesPattern = !isArgsLength && !isLineLength && !isComments
                    && !isEmptyBlocks && !isCombinationXButNotY;
         if (usesPattern && pattern.empty()) {
-            std::cerr << colors::Error << "Пустое выражение — поиск отменён." << colors::Reset << "\n";
+            std::cerr << theme::Role::Error << "Пустое выражение — поиск отменён." << theme::Role::Reset << "\n";
             return results;
         }
         std::regex lineRx, wholeRx, yRx;
@@ -846,7 +846,7 @@ namespace file_searcher {
                 std::string px = regex_builder::EscapeXyzWithBounds(req.X);
                 std::string py = regex_builder::EscapeXyzWithBounds(req.Y);
                 if (px.empty() || py.empty()) {
-                    std::cerr << colors::Error << "Пустое выражение — поиск отменён." << colors::Reset << "\n";
+                    std::cerr << theme::Role::Error << "Пустое выражение — поиск отменён." << theme::Role::Reset << "\n";
                     return results;
                 }
                 wholeRx = std::regex(px, std::regex::multiline | std::regex::optimize);
@@ -856,7 +856,7 @@ namespace file_searcher {
                 if (needWholeRx) wholeRx = std::regex(pattern, std::regex::multiline | std::regex::optimize);
             }
         } catch (const std::regex_error& e) {
-            std::cerr << colors::Error << "Ошибка в regex: " << e.what() << colors::Reset << "\n";
+            std::cerr << theme::Role::Error << "Ошибка в regex: " << e.what() << theme::Role::Reset << "\n";
             return results;
         }
 
