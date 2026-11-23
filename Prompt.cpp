@@ -48,7 +48,7 @@ namespace prompt {
     }
 
     std::string ReadLine(const std::string& promptText) {
-        std::cout << promptText;
+        std::cout << theme::Role::Question << promptText << theme::Role::Reset;
         GoBack = false; 
         std::string input;
         std::getline(std::cin, input);
@@ -160,7 +160,7 @@ namespace prompt {
                 if (GoBack) continue;
 
                 if (req.EmptyMetricValue != regex_builder::EmptyMetric::StrictlyEmpty) {
-                    std::cout << "Сколько (0 — назад): ";
+                    std::cout << theme::Role::Question << "Сколько (0 — назад): " << theme::Role::Reset;
                     req.EmptyMaxCount = ReadInt(0, 10000);
                     if (GoBack) continue;
                 }
@@ -299,15 +299,15 @@ namespace prompt {
             if (GoBack) continue;
 
             if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
-                std::cout << "Минимум (0 — назад): ";
+                std::cout << theme::Role::Question << "Минимум (0 — назад): " << theme::Role::Reset;
                 req.MinCount = ReadInt(1, 10000);
                 if (GoBack) continue;
-                std::cout << "Максимум (0 — назад): ";
+                std::cout << theme::Role::Question << "Максимум (0 — назад): " << theme::Role::Reset;
                 req.MaxCount = ReadInt(req.MinCount, 10000);
                 if (GoBack) continue;
             }
             else {
-                std::cout << "Сколько цифр (0 — назад): ";
+                std::cout << theme::Role::Question << "Сколько цифр (0 — назад): " << theme::Role::Reset;
                 req.MinCount = ReadInt(1, 10000);
                 if (GoBack) continue;
             }
@@ -331,12 +331,13 @@ namespace prompt {
             std::cout << theme::Role::Error << "Нет доступных языков в настройках." << theme::Role::Reset << "\n";
             return false;
         }
-        std::cout << "\nВыберите язык:\n";
+        std::cout << "\n" << theme::Role::Question << "Выберите язык:\n" << theme::Role::Reset;
         for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
             const auto& l = settings::FavoriteLanguages[i];
-            std::cout << "  " << (i + 1) << ". " << l.Name << " (" << l.Prefix << ")\n";
+            std::cout << "  " << theme::Role::MenuNum << (i + 1) << "." << theme::Role::Default << " " 
+                      << l.Name << " (" << theme::Role::FileName << l.Prefix << theme::Role::Default << ")\n";
         }
-        std::cout << "  0. Назад\n> ";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
         int langIdx = ReadInt(1, (int)settings::FavoriteLanguages.size());
         if (GoBack) return false;
         req.Language = settings::FavoriteLanguages[langIdx - 1].Name;
@@ -478,10 +479,10 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& kv : settings::ExtensionSets) {
-            std::cout << "  " << i++ << ". [" << kv.first << "] "
-                      << FormatSet(kv.second) << "\n";
+            std::cout << "  " << theme::Role::MenuNum << i++ << "." << theme::Role::Default << " [" 
+                      << kv.first << "] " << theme::Role::FileName << FormatSet(kv.second) << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultExtensionSet << "\n\n";
+        std::cout << "  " << theme::Role::Question << "По умолчанию: " << theme::Role::FileName << settings::DefaultExtensionSet << "\n\n" << theme::Role::Reset;
     }
 
     static void EditExtensionSets() {
@@ -585,12 +586,12 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет";
-                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет";
-                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет";
-                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что сделать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -866,10 +867,10 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "\n=== ВЫВОД ===\n\n";
-                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Показывать первых: " << settings::ShowFirstN << "";
-                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Файл результатов: " << settings::ResultsFile << "";
-                std::cout << "  0. Назад\n> ";
+                std::cout << "\n" << theme::Role::Title << "=== ВЫВОД ===\n\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Показывать первых: " << theme::Role::FileName << settings::ShowFirstN << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Файл результатов: " << theme::Role::FileName << settings::ResultsFile << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
                 printMenu = false;
             } else {
                 std::cout << "> ";
@@ -1138,15 +1139,15 @@ namespace prompt {
 
             else if (choice == "3") {
                 if (!settings::ExtensionSets.empty()) {
-                    std::cout << "\nВыберите сет расширений:\n";
+                    std::cout << "\n" << theme::Role::Question << "Выберите сет расширений:\n" << theme::Role::Reset;
                     int i = 1;
                     std::vector<std::string> keys;
                     for (const auto& kv : settings::ExtensionSets) {
-                        std::cout << "  " << i++ << ". " << kv.first
-                                  << " — " << FormatSet(kv.second) << "\n";
+                        std::cout << "  " << theme::Role::MenuNum << i++ << "." << theme::Role::Default << " " << kv.first
+                                  << " — " << theme::Role::FileName << FormatSet(kv.second) << "\n";
                         keys.push_back(kv.first);
                     }
-                    std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Отмена\n> ";
                     int n = ReadInt(0, (int)keys.size());
                     if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.Extensions = settings::ExtensionSets[keys[n - 1]];
