@@ -2,8 +2,13 @@
   "entries": [
     {
       "source": "before_copy",
-      "text": "theme::SetTestTheme();",
-      "time": "2026-11-22 08:31:21"
+      "text": "std::cout << theme::Role::Question << \"Что искать?\\n\" << theme::Role::Reset;",
+      "time": "2026-11-24 13:16:03"
+    },
+    {
+      "source": "before_copy",
+      "text": "static void ShowHistoryList() {\r\n    std::cout << \"\\n\" << theme::Role::Title << \"=== ИСТОРИЯ ===\\n\\n\" << theme::Role::Reset;\r\n    size_t N = settings::History.size();\r\n    for (size_t i = N; i > 0; --i) {\r\n        std::cout << \"  \" << theme::Role::MenuNum << i << \".\" \r\n                  << theme::Role::FileName << \" \" << settings::History[i - 1].Description << theme::Role::Reset << \"\\n\";\r\n        std::cout << \"     \" << theme::Role::Match << settings::History[i - 1].Pattern << theme::Role::Reset << \"\\n\\n\";\r\n    }\r\n}",
+      "time": "2026-11-24 09:30:33"
     }
   ],
   "max": 50

@@ -1,9 +1,9 @@
 {
   "default_exclude_dir_set": "Default",
   "default_exclude_file_set": "None",
-  "default_extension_set": "C++",
-  "default_language": "C#",
-  "default_max_file_size_set": "До 10 МБ",
+  "default_extension_set": "C#",
+  "default_language": "C++",
+  "default_max_file_size_set": "Все читать",
   "exclude_dir_sets": {
     "Default": [
       "bin",
@@ -24,6 +24,9 @@
     ]
   },
   "exclude_file_sets": {
+    "1": [
+      "1"
+    ],
     "C#": [
       "*.FileSearcher.cs",
       "*.g.cs"
@@ -44,9 +47,6 @@
       ".h",
       ".hpp",
       ".cs"
-    ],
-    "Python": [
-      ".py"
     ],
     "Web": [
       ".js",
@@ -97,6 +97,6 @@
   },
   "output": {
     "results_file": "search_results.txt",
-    "show_first_n": 50
+    "show_first_n": 100
   }
 }

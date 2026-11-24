@@ -1,31 +1,4 @@
 {
-  "favorites": [
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Структура: X=if (строго пусто)",
-      "empty_max_count": 0,
-      "empty_metric": 1,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 0,
-      "name": "if",
-      "number_compare": 1,
-      "pattern": "[empty-block: if, строго пусто]",
-      "quantity_type": 1,
-      "req_type": 1,
-      "structure_type": 1,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "if",
-      "x_not_y_mode": 1,
-      "y": "",
-      "z": ""
-    }
-  ],
+  "favorites": [],
   "max": 50
 }
