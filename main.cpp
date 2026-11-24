@@ -653,7 +653,7 @@ int main() {
 #endif
 
     settings::Load("settings.json");
-    theme::SetTestTheme();
+    theme::SetNewTheme();
     settings::LoadHistory();
     settings::LoadFavorites();
     settings::LoadClipboardHistory();
@@ -682,7 +682,7 @@ int main() {
 
         if (prompt::WantFavorites) {
             prompt::WantFavorites = false;
-            if (settings::Favorites.empty()) { std::cout << theme::Role::Warning << "\nИзбранное пусто.\n" << theme::Role::Reset << "\n"; continue; }
+            if (settings::Favorites.empty()) { std::cout << theme::Role::Error << "\nИзбранное пусто.\n" << theme::Role::Reset << "\n"; continue; }
             ShowFavoritesList();
             std::cout << theme::Role::Question << "Введите номер элемента, чтобы перейти в поиск (0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::Favorites.size());

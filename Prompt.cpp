@@ -347,6 +347,190 @@ namespace prompt {
         return true;
     }
 
+    // ============ СПРАВКА ============
+
+    static void ShowHelpSection(int n) {
+        switch (n) {
+        case 1:
+            std::cout << "\n=== СТРУКТУРА ===\n\n";
+            std::cout << "Два подрежима:\n\n";
+            std::cout << "1. X, внутри которого пусто\n";
+            std::cout << "   Ищет пустые блоки после ключевого слова.\n\n";
+            std::cout << "   Примеры:\n";
+            std::cout << "     if { }          — найдётся\n";
+            std::cout << "     while { }       — найдётся\n";
+            std::cout << "     if { x; }       — не найдётся (не пусто)\n";
+            std::cout << "     catch { }       — найдётся\n\n";
+            std::cout << "   Метрики пустоты:\n";
+            std::cout << "     - Строго пусто — ни одного непробельного символа\n";
+            std::cout << "     - <= N непробельных символов\n";
+            std::cout << "     - <= N строк\n\n";
+            std::cout << "2. X -> Y -> Z\n";
+            std::cout << "   Ищет \"X, потом Y, потом Z\" в любом порядке через файл.\n\n";
+            std::cout << "   Пример: X=\"alice\", Y=\"is lovely\", Z=\"woman\"\n";
+            std::cout << "   Найдёт: \"alice ... is lovely ... woman\"\n\n";
+            std::cout << "   Спецсимволы в X/Y/Z:\n";
+            std::cout << "     % — любые пробелы (опционально)\n";
+            std::cout << "     * — любые символы до первого совпадения\n";
+            std::cout << "     ^ — начало строки\n";
+            std::cout << "     $ — конец строки\n";
+            break;
+        case 2:
+            std::cout << "\n=== КОМБИНИРОВАНИЕ ===\n\n";
+            std::cout << "1. X, но не Y\n";
+            std::cout << "   Два режима:\n";
+            std::cout << "     - По позиции — X, который не пересекается с Y\n";
+            std::cout << "     - По строке — в строке с X нет Y\n\n";
+            std::cout << "   Пример: X=\"catch\", Y=\"catch (Exception)\"\n";
+            std::cout << "     catch { }              — найдётся\n";
+            std::cout << "     catch (Exception) { }  — НЕ найдётся\n";
+            std::cout << "     catch (MyError) { }    — найдётся\n\n";
+            std::cout << "2. X или Y\n";
+            std::cout << "   Ищет любой из элементов. Список через запятую:\n";
+            std::cout << "     foo, bar, baz\n\n";
+            std::cout << "   Если элемент содержит запятую — в кавычках:\n";
+            std::cout << "     \"foo, bar\", baz\n";
+            break;
+        case 3:
+            std::cout << "\n=== КОЛИЧЕСТВО ===\n\n";
+            std::cout << "1. Количество цифр в числе\n";
+            std::cout << "   Ищет числа с N цифрами.\n\n";
+            std::cout << "   Примеры (N=3):\n";
+            std::cout << "     равно        — \"999\", но не \"99\" и не \"1000\"\n";
+            std::cout << "     больше       — \"1000\", \"12345\", но не \"999\"\n";
+            std::cout << "     меньше       — \"12\", \"5\", но не \"999\"\n";
+            std::cout << "     в диапазоне  — от 10 до 99\n\n";
+            std::cout << "2. Длина строки\n";
+            std::cout << "   Ищет строки длиной N символов (UTF-8).\n\n";
+            std::cout << "   Примеры (N=50):\n";
+            std::cout << "     > 50   — строки длиннее 50\n";
+            std::cout << "     = 50   — ровно 50\n";
+            std::cout << "     < 50   — короче 50\n";
+            std::cout << "     10..50 — от 10 до 50\n\n";
+            std::cout << "3. Длина списка аргументов\n";
+            std::cout << "   Ищет функции/методы/вызовы с N аргументами.\n\n";
+            std::cout << "   Примеры:\n";
+            std::cout << "     foo(a, b)            — 2 аргумента\n";
+            std::cout << "     Foo<int>(1, 2, 3)    — 3 аргумента\n";
+            std::cout << "     p->bar(x)            — 1 аргумент\n";
+            std::cout << "     void f()             — 0 аргументов\n\n";
+            std::cout << "   Показывает [decl] (объявление) или [call] (вызов).\n";
+            break;
+        case 4:
+            std::cout << "\n=== ФОРМАТ ===\n\n";
+            std::cout << "Автоматический поиск типовых форматов:\n\n";
+            std::cout << "  1. Email     — admin@company.com\n";
+            std::cout << "  2. URL       — https://example.com/path\n";
+            std::cout << "  3. IP        — 192.168.1.1\n";
+            std::cout << "  4. GUID      — 550e8400-e29b-41d4-a716-446655440000\n";
+            std::cout << "  5. Дата      — 2024-05-12, 12.05.2024, 2024/05/12\n";
+            break;
+        case 5:
+            std::cout << "\n=== КОММЕНТАРИИ ===\n\n";
+            std::cout << "Поиск слов в комментариях. Три режима:\n\n";
+            std::cout << "  1. В начале строки — комментарий стоит в начале\n";
+            std::cout << "  2. В конце строки  — комментарий стоит в конце строки\n";
+            std::cout << "  3. Все комментарии — любой комментарий\n\n";
+            std::cout << "Язык задаёт префикс:\n";
+            std::cout << "  C#, C++, JS — //\n";
+            std::cout << "  Python      — #\n";
+            std::cout << "  SQL         — --\n\n";
+            std::cout << "Слово для поиска — опционально. Если пусто, найдутся все.\n";
+            break;
+        case 6:
+            std::cout << "\n=== СЛОВО С ГРАНИЦАМИ ===\n\n";
+            std::cout << "Ищет конкретное слово. Можно включить/выключить границы.\n\n";
+            std::cout << "С границами (\\b):\n";
+            std::cout << "  \"name\" — только как отдельное слово\n";
+            std::cout << "  username, filename, nameof — НЕ найдутся\n\n";
+            std::cout << "Без границ:\n";
+            std::cout << "  \"name\" — везде, включая username, filename, nameof\n\n";
+            std::cout << "Совет: для русских слов границы не работают (std::regex).\n";
+            std::cout << "Используйте поиск без границ.\n";
+            break;
+        case 7:
+            std::cout << "\n=== ИЗБРАННОЕ ===\n\n";
+            std::cout << "Сохранённые запросы с именами. В главном меню — пункт 7.\n\n";
+            std::cout << "  - Добавить в избранное — в меню действий после поиска (пункт 5)\n";
+            std::cout << "  - Открыть — главное меню -> 7 -> выбрать элемент\n";
+            std::cout << "  - Удалить — в меню избранного (0) или из меню действий\n\n";
+            std::cout << "Хранится в favorites.json.\n";
+            break;
+        case 8:
+            std::cout << "\n=== ИСТОРИЯ ПОИСКОВ ===\n\n";
+            std::cout << "Все выполненные поиски. В главном меню — пункт 8.\n\n";
+            std::cout << "  - Открыть — главное меню -> 8 -> выбрать элемент\n";
+            std::cout << "  - Восстановить запрос — выберите элемент, вернёт в меню действий\n";
+            std::cout << "  - Ограничение — 20 последних (настраивается)\n\n";
+            std::cout << "Хранится в history.json.\n";
+            break;
+        case 9:
+            std::cout << "\n=== ИСТОРИЯ БУФЕРА ===\n\n";
+            std::cout << "Скопированные выражения. В главном меню — пункт 9.\n\n";
+            std::cout << "  - Что попадает — каждый раз, когда вы копируете выражение\n";
+            std::cout << "  - Восстановить в буфер — выберите элемент, оно попадёт в буфер\n";
+            std::cout << "  - Очистка — старше 24 часов удаляется автоматически\n\n";
+            std::cout << "Хранится в clipboard_history.json.\n";
+            break;
+        case 10:
+            std::cout << "\n=== НАСТРОЙКИ ===\n\n";
+            std::cout << "В главном меню — пункт 0.\n\n";
+            std::cout << "  - Расширения — какие файлы искать (.cs, .cpp, .py, ...)\n";
+            std::cout << "  - Исключённые папки — что пропускать (bin, obj, .git)\n";
+            std::cout << "  - Исключённые файлы — маски (*.g.cs, *.min.js)\n";
+            std::cout << "  - Максимальный размер — лимит в МБ на файл\n";
+            std::cout << "  - Вывод — сколько результатов показывать\n";
+            std::cout << "  - Языки — префиксы комментариев\n\n";
+            std::cout << "Можно создавать наборы (сеты) и переключать их по умолчанию.\n\n";
+            std::cout << "Хранится в settings.json.\n";
+            break;
+        }
+    }
+
+    static void ShowHelp() {
+        std::cout << "\n=== СПРАВКА ===\n\n";
+        std::cout << "CodeSearch — умный поиск по исходному коду.\n";
+        std::cout << "Выберите режим (1-6) или зайдите в историю/избранное.\n";
+        std::cout << "После настройки нажмите «3. Начать поиск» в меню действий.\n";
+        std::cout << "0 в любом запросе — «назад», Ctrl+C — выход.\n\n";
+
+        while (true) {
+            std::cout << "Что конкретнее хотите узнать?\n\n";
+            std::cout << "  1. Структура\n";
+            std::cout << "  2. Комбинирование\n";
+            std::cout << "  3. Количество\n";
+            std::cout << "  4. Формат\n";
+            std::cout << "  5. Комментарии\n";
+            std::cout << "  6. Слово с границами\n";
+            std::cout << "  7. Избранное\n";
+            std::cout << "  8. История поисков\n";
+            std::cout << "  9. История буфера\n";
+            std::cout << "  10. Настройки\n";
+            std::cout << "  0. Назад в главное меню\n> ";
+
+            std::string input;
+            std::getline(std::cin, input);
+
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) return; // пустой Enter — назад
+            input = input.substr(s, e - s + 1);
+
+            std::string lc = input;
+            for (auto& c : lc) c = (char)std::tolower((unsigned char)c);
+            if (lc == "b" || lc == "back" || lc == "назад") return;
+
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { std::cout << "\n"; continue; }
+
+            if (n == 0) return;
+            if (n < 1 || n > 10) { std::cout << "\n"; continue; }
+
+            ShowHelpSection(n);
+            std::cout << "\n";
+        }
+    }
+
     // ============ ГЛАВНЫЙ МЕТОД ============
 
     regex_builder::SearchRequest Run() {
@@ -380,6 +564,15 @@ namespace prompt {
             size_t e = input.find_last_not_of(" \t\r\n");
             if (s == std::string::npos) continue;
             input = input.substr(s, e - s + 1);
+
+            // help / h / ? / справка — регистронезависимо
+            std::string lc = input;
+            for (auto& c : lc) c = (char)std::tolower((unsigned char)c);
+            if (lc == "help" || lc == "h" || lc == "?" || lc == "справка") {
+                ShowHelp();
+                printMenu = true;
+                continue;
+            }
 
             int choice = -1;
             try { choice = std::stoi(input); } catch (...) { continue; }

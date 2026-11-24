@@ -22,6 +22,12 @@ namespace theme {
         Reset        // Сброс цвета
     };
 
+    enum class ThemeType { 
+        Default, 
+        Matrix, 
+        HighContrast 
+    };
+
     // 2. Глобальный словарь текущей темы
     inline std::map<Role, std::string> current_theme;
 
@@ -74,6 +80,29 @@ namespace theme {
         current_theme[Role::Warning]    = "\033[33m";   // Желтый
         current_theme[Role::Default]    = "";
     }
+
+    inline void SetNewTheme() {
+        current_theme.clear(); // Очищаем на случай, если SetDefaultTheme уже вызывался
+
+        // 1. Базовые элементы интерфейса
+        current_theme[Role::Title]      = "\033[1;33m"; // Жирный желтый (для === ЗАГОЛОВКИ ===)
+        current_theme[Role::MenuNum]    = "\033[35m";   // Маджента/Розовый (для цифр 1., 2., 0.)
+        current_theme[Role::Question]   = "\033[36m";   // Бирюзовый (для "Что искать? >")
+        
+        // 2. Контент
+        current_theme[Role::Match]      = "\033[32m";   // Ярко-зеленый (для найденных совпадений)
+        current_theme[Role::FileName]   = "\033[31m";   // Красный (для имен файлов)
+        current_theme[Role::LineNumber] = "\033[34m";   // Синий (для номеров строк)
+
+        // 3. Статусы (используем ваши роли)
+        current_theme[Role::Error]      = "\033[1;31m"; // Жирный красный
+        current_theme[Role::Warning]    = "\033[33m";   // Желтый
+
+        // 4. Технические
+        current_theme[Role::Reset]      = "\033[0m";
+        current_theme[Role::Default]    = ""; // Пустая строка или \033[37m (белый)
+    }
+
 
     // Тестовая тема (Кислотная/Матрица), чтобы проверить работу системы
     inline void SetTestTheme() {
