@@ -1,5 +1,5 @@
-# Собрано 2026-11-17 06:35:05
-# Всего файлов: 20
+# Собрано 2026-11-24 21:05:22
+# Всего файлов: 19
 ======================================================================
 
 ======================================================================
@@ -7,204 +7,19 @@
 ======================================================================
 
 {
-  "entries": [],
+  "entries": [
+    {
+      "source": "before_copy",
+      "text": "std::cout << theme::Role::Question << \"Что искать?\\n\" << theme::Role::Reset;",
+      "time": "2026-11-24 13:16:03"
+    },
+    {
+      "source": "before_copy",
+      "text": "static void ShowHistoryList() {\r\n    std::cout << \"\\n\" << theme::Role::Title << \"=== ИСТОРИЯ ===\\n\\n\" << theme::Role::Reset;\r\n    size_t N = settings::History.size();\r\n    for (size_t i = N; i > 0; --i) {\r\n        std::cout << \"  \" << theme::Role::MenuNum << i << \".\" \r\n                  << theme::Role::FileName << \" \" << settings::History[i - 1].Description << theme::Role::Reset << \"\\n\";\r\n        std::cout << \"     \" << theme::Role::Match << settings::History[i - 1].Pattern << theme::Role::Reset << \"\\n\\n\";\r\n    }\r\n}",
+      "time": "2026-11-24 09:30:33"
+    }
+  ],
   "max": 50
-}
-
-======================================================================
-# ФАЙЛ: colors.cpp
-======================================================================
-
-#include <iostream>
-#include <vector>
-#include <string>
-#include <iomanip>
-#include <algorithm>
-#include <cmath>
-#include <set>
-
-#ifdef _WIN32
-#include <windows.h>
-#endif
-
-struct Color {
-    int code;
-    int r, g, b;
-    std::string hex;
-};
-
-std::string ToHex(int r, int g, int b) {
-    char buf[10];
-    snprintf(buf, sizeof(buf), "#%02x%02x%02x", r, g, b);
-    return std::string(buf);
-}
-
-// Функция, которая применяет алгоритм "Ближайший сосед" к любому списку
-void ApplyTSP(std::vector<Color>& list) {
-    if (list.empty()) return;
-    std::vector<Color> sorted;
-    std::vector<bool> visited(list.size(), false);
-    
-    // Находим самый темный цвет, чтобы начать с него (или черный)
-    int current = 0; 
-    double min_l = 999;
-    for (size_t i = 0; i < list.size(); ++i) {
-        double l = 0.299 * list[i].r + 0.587 * list[i].g + 0.114 * list[i].b;
-        if (l < min_l) {
-            min_l = l;
-            current = i;
-        }
-    }
-
-    sorted.push_back(list[current]);
-    visited[current] = true;
-
-    for (size_t step = 1; step < list.size(); ++step) {
-        int next_color = -1;
-        double min_dist = 999999.0;
-
-        for (size_t i = 0; i < list.size(); ++i) {
-            if (visited[i]) continue;
-            
-            double dr = list[current].r - list[i].r;
-            double dg = list[current].g - list[i].g;
-            double db = list[current].b - list[i].b;
-            double dist = 2.0 * dr * dr + 4.0 * dg * dg + 3.0 * db * db; 
-
-            if (dist < min_dist) {
-                min_dist = dist;
-                next_color = i;
-            }
-        }
-
-        if (next_color != -1) {
-            current = next_color;
-            visited[current] = true;
-            sorted.push_back(list[current]);
-        }
-    }
-    list = sorted; // Заменяем исходный массив на отсортированный
-}
-
-int main() {
-#ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut != INVALID_HANDLE_VALUE) {
-        DWORD mode = 0;
-        if (GetConsoleMode(hOut, &mode))
-            SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-    }
-#endif
-
-    std::vector<Color> colors;
-    for (int i = 0; i < 256; ++i) {
-        int r, g, b;
-        if (i < 16) {
-            int base[16][3] = {
-                {0,0,0}, {128,0,0}, {0,128,0}, {128,128,0}, {0,0,128}, {128,0,128}, {0,128,128}, {192,192,192},
-                {128,128,128}, {255,0,0}, {0,255,0}, {255,255,0}, {0,0,255}, {255,0,255}, {0,255,255}, {255,255,255}
-            };
-            r = base[i][0]; g = base[i][1]; b = base[i][2];
-        } else if (i < 232) {
-            int levels[6] = {0, 95, 135, 175, 215, 255};
-            int idx = i - 16;
-            r = levels[idx / 36];
-            g = levels[(idx % 36) / 6];
-            b = levels[idx % 6];
-        } else {
-            int v = 8 + (i - 232) * 10;
-            r = v; g = v; b = v;
-        }
-        colors.push_back({i, r, g, b, ToHex(r, g, b)});
-    }
-
-    // Твой огромный список изгнанных
-    std::set<int> excludedCodes = {
-        138, 174, 210, 209, 173, 180, 144, 181, 104, 68, 67, 103, 97, 61, 60, 96,
-        176, 140, 139, 175, 205, 169, 133, 132, 131, 95, 101, 65, 66, 137, 136, 100, 64, 58,
-        130, 94, 29, 148, 184, 220, 226, 190, 154, 98, 62, 56, 92, 128, 163, 127, 91, 55, 54, 90, 126, 162,
-        134, 164, 219, 207, 206,
-        49, 48, 47, 50, 51,
-        55, 56, 58, 60, 61, 62, 64, 65, 66, 67, 68, 90, 91, 92, 94, 95, 96, 97, 98, 100, 101, 103, 104, 
-        126, 127, 128, 130, 131, 132, 133, 134, 136, 137, 138, 139, 140, 144, 148, 154, 162, 163, 164, 
-        169, 173, 174, 175, 176, 180, 181, 184, 190, 205, 206, 207, 209, 210, 219, 220, 226, 208, 202, 204, 203
-    };
-    
-    std::vector<Color> baseColors;
-    std::vector<Color> gradColors;
-    std::vector<Color> excludedColors;
-
-    for (int i = 0; i < 256; ++i) {
-        if (i < 16) {
-            baseColors.push_back(colors[i]);
-        } else if (excludedCodes.count(i)) {
-            excludedColors.push_back(colors[i]);
-        } else {
-            gradColors.push_back(colors[i]);
-        }
-    }
-
-    // 1. Строим идеальный градиент для оставшихся
-    ApplyTSP(gradColors);
-
-    // 2. Строим градиент для изгнанных цветов
-    ApplyTSP(excludedColors);
-
-    // 3. РУЧНАЯ КОРРЕКТИРОВКА (208 перед 202, 204 после 203)
-    auto get_color = [&](int code) {
-        return *std::find_if(colors.begin(), colors.end(), [code](const Color& c){ return c.code == code; });
-    };
-    
-    auto remove_code = [&](int code) {
-        excludedColors.erase(std::remove_if(excludedColors.begin(), excludedColors.end(), [code](const Color& c) { return c.code == code; }), excludedColors.end());
-    };
-
-    // Вынимаем эти 4 цвета из списка
-    remove_code(208); remove_code(202); remove_code(204); remove_code(203);
-
-    // Вставляем 208 перед 202
-    auto it202 = std::find_if(excludedColors.begin(), excludedColors.end(), [](const Color& c){ return c.code == 202; });
-    if (it202 != excludedColors.end()) {
-        excludedColors.insert(it202, get_color(208));
-    }
-
-    // Вставляем 204 после 203
-    auto it203 = std::find_if(excludedColors.begin(), excludedColors.end(), [](const Color& c){ return c.code == 203; });
-    if (it203 != excludedColors.end()) {
-        excludedColors.insert(it203 + 1, get_color(204));
-    }
-
-    // 4. ВЫВОД
-    std::cout << "=== БАЗОВЫЕ 16 ЦВЕТОВ ===\n";
-    std::cout << "=====================================================\n";
-    for (const auto& c : baseColors) {
-        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        int fg_color = (luminance > 128) ? 0 : 15;
-        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
-                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
-    }
-
-    std::cout << "\n=== ОСНОВНОЙ ГРАДИЕНТ ===\n";
-    std::cout << "=====================================================\n";
-    for (const auto& c : gradColors) {
-        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        int fg_color = (luminance > 128) ? 0 : 15;
-        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
-                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
-    }
-
-    std::cout << "\n=== ИЗГНАННЫЕ ЦВЕТА (Выстроены в градиент) ===\n";
-    std::cout << "=====================================================\n";
-    for (const auto& c : excludedColors) {
-        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
-        int fg_color = (luminance > 128) ? 0 : 15;
-        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
-                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
-    }
-
-    return 0;
 }
 
 ======================================================================
@@ -213,286 +28,226 @@ int main() {
 
 #pragma once
 #include <string>
+#include <map>
+#include <iostream>
 
-namespace colors {
+namespace theme {
 
-    // Базовые цвета
-    const std::string Green    = "\033[32m";
-    const std::string Yellow   = "\033[33m";
-    const std::string Cyan     = "\033[96m";
-    const std::string Magenta  = "\033[35m";
-    const std::string Burgundy = "\033[38;5;88m";
-    const std::string Red      = "\033[31m";
-    const std::string Bold     = "\033[1m";
-    const std::string Dim      = "\033[2m";
-    const std::string Reset    = "\033[0m";
+    enum class Role {
+        Title, Question, MenuNum, MenuItem, Match, FileName, LineNumber, StatValue, Dim, Error, Warning, Default, Reset
+    };
 
-    // Назначение
-    const std::string File       = Yellow;
-    const std::string LineNumber = Green;
-    const std::string MatchText  = Magenta;
-    const std::string Totals     = Cyan;
-    const std::string MenuHeader = "";      // без цвета
-    const std::string MenuNumber = Burgundy;
-    const std::string Warning    = Yellow;
-    const std::string Error      = Red;
+    inline std::map<Role, std::string> current_theme;
+    inline std::map<std::string, std::map<Role, std::string>> AllThemes;
+
+    // Парсер (оставляем как был)
+    inline std::string ParseColorString(const std::string& colorName) {
+        if (colorName.empty()) return "";
+        std::string ansi = "\033[";
+        bool first = true;
+        size_t start = 0, end;
+        while ((end = colorName.find(' ', start)) != std::string::npos) {
+            std::string token = colorName.substr(start, end - start);
+            if (token == "bold") ansi += first ? "1" : ";1";
+            else if (token == "dim") ansi += first ? "2" : ";2";
+            else if (token == "red") ansi += first ? "31" : ";31";
+            else if (token == "green") ansi += first ? "32" : ";32";
+            else if (token == "yellow") ansi += first ? "33" : ";33";
+            else if (token == "blue") ansi += first ? "34" : ";34";
+            else if (token == "magenta") ansi += first ? "35" : ";35";
+            else if (token == "cyan") ansi += first ? "36" : ";36";
+            else if (token == "white") ansi += first ? "37" : ";37";
+            first = false;
+            start = end + 1;
+        }
+        std::string token = colorName.substr(start);
+        if (token == "bold") ansi += first ? "1" : ";1";
+        else if (token == "dim") ansi += first ? "2" : ";2";
+        else if (token == "red") ansi += first ? "31" : ";31";
+        else if (token == "green") ansi += first ? "32" : ";32";
+        else if (token == "yellow") ansi += first ? "33" : ";33";
+        else if (token == "blue") ansi += first ? "34" : ";34";
+        else if (token == "magenta") ansi += first ? "35" : ";35";
+        else if (token == "cyan") ansi += first ? "36" : ";36";
+        else if (token == "white") ansi += first ? "37" : ";37";
+        return ansi + "m";
+    }
+
+    // Заполнение всех тем
+    inline void InitThemes() {
+        AllThemes.clear();
+        
+        // 1. Default (наша тестовая)
+        AllThemes["default"] = {
+            {Role::Title, "\033[1;36m"}, {Role::Question, "\033[36m"}, {Role::MenuNum, "\033[33m"},
+            {Role::MenuItem, "\033[32m"}, {Role::Match, "\033[35m"}, {Role::FileName, "\033[34m"},
+            {Role::LineNumber, "\033[31m"}, {Role::StatValue, "\033[36m"}, {Role::Dim, "\033[2m"},
+            {Role::Error, "\033[31m"}, {Role::Warning, "\033[33m"}, {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 2. GraphitePhlegmatic (afd7d7, b2b2b2, ff875f, 87afaf, dadada)
+        AllThemes["GraphitePhlegmatic"] = {
+            {Role::Title, "\033[38;2;175;215;215m"}, {Role::Question, "\033[38;2;178;178;178m"},
+            {Role::MenuNum, "\033[38;2;255;135;95m"}, {Role::MenuItem, "\033[38;2;135;175;175m"},
+            {Role::Match, "\033[38;2;218;218;218m"}, {Role::FileName, "\033[38;2;135;175;175m"},
+            {Role::LineNumber, "\033[38;2;255;135;95m"}, {Role::StatValue, "\033[38;2;175;215;215m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;255;135;95m"}, {Role::Warning, "\033[38;2;178;178;178m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 3. PredatorBlood (ffaf5f, 005f5f, 008787, 870000, 585858, af005f)
+        AllThemes["PredatorBlood"] = {
+            {Role::Title, "\033[38;2;255;175;95m"}, {Role::Question, "\033[38;2;0;95;95m"},
+            {Role::MenuNum, "\033[38;2;0;135;135m"}, {Role::MenuItem, "\033[38;2;135;0;0m"},
+            {Role::Match, "\033[38;2;88;88;88m"}, {Role::FileName, "\033[38;2;175;0;95m"},
+            {Role::LineNumber, "\033[38;2;135;0;0m"}, {Role::StatValue, "\033[38;2;255;175;95m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;135;0;0m"}, {Role::Warning, "\033[38;2;255;175;95m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 4. SwampFlower (8787d7, 005f5f, 5f8787, 00875f, 5f8700, 5fafff)
+        AllThemes["SwampFlower"] = {
+            {Role::Title, "\033[38;2;135;135;215m"}, {Role::Question, "\033[38;2;0;95;95m"},
+            {Role::MenuNum, "\033[38;2;95;135;135m"}, {Role::MenuItem, "\033[38;2;0;135;95m"},
+            {Role::Match, "\033[38;2;95;135;0m"}, {Role::FileName, "\033[38;2;95;175;255m"},
+            {Role::LineNumber, "\033[38;2;0;135;95m"}, {Role::StatValue, "\033[38;2;135;135;215m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;0;135;95m"}, {Role::Warning, "\033[38;2;95;135;0m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 5. InfectedFlowers (af5faf, afd7d7, bcbcbc, 8787d7, 87afaf, afd7af)
+        AllThemes["InfectedFlowers"] = {
+            {Role::Title, "\033[38;2;175;95;175m"}, {Role::Question, "\033[38;2;175;215;215m"},
+            {Role::MenuNum, "\033[38;2;188;188;188m"}, {Role::MenuItem, "\033[38;2;135;135;215m"},
+            {Role::Match, "\033[38;2;135;175;175m"}, {Role::FileName, "\033[38;2;175;215;175m"},
+            {Role::LineNumber, "\033[38;2;188;188;188m"}, {Role::StatValue, "\033[38;2;175;95;175m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;95;175m"}, {Role::Warning, "\033[38;2;135;135;215m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 6. WitchVial (af5faf, 5f8787, 5f87af, 8787af, af87af, d7af87)
+        AllThemes["WitchVial"] = {
+            {Role::Title, "\033[38;2;175;95;175m"}, {Role::Question, "\033[38;2;95;135;135m"},
+            {Role::MenuNum, "\033[38;2;95;135;175m"}, {Role::MenuItem, "\033[38;2;135;135;175m"},
+            {Role::Match, "\033[38;2;175;135;175m"}, {Role::FileName, "\033[38;2;215;175;135m"},
+            {Role::LineNumber, "\033[38;2;95;135;175m"}, {Role::StatValue, "\033[38;2;175;95;175m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;95;175m"}, {Role::Warning, "\033[38;2;95;135;135m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 7. OldHag (af5faf, 87875f, eeeeee, 8787af, d7af87, 5f8787)
+        AllThemes["OldHag"] = {
+            {Role::Title, "\033[38;2;175;95;175m"}, {Role::Question, "\033[38;2;135;135;95m"},
+            {Role::MenuNum, "\033[38;2;238;238;238m"}, {Role::MenuItem, "\033[38;2;135;135;175m"},
+            {Role::Match, "\033[38;2;215;175;135m"}, {Role::FileName, "\033[38;2;95;135;135m"},
+            {Role::LineNumber, "\033[38;2;238;238;238m"}, {Role::StatValue, "\033[38;2;175;95;175m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;95;175m"}, {Role::Warning, "\033[38;2;135;135;95m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 8. DarkSea (af5faf, 005f87, 0087af, 87ffff, 5fafff, eeeeee)
+        AllThemes["DarkSea"] = {
+            {Role::Title, "\033[38;2;175;95;175m"}, {Role::Question, "\033[38;2;0;95;135m"},
+            {Role::MenuNum, "\033[38;2;0;135;175m"}, {Role::MenuItem, "\033[38;2;135;255;255m"},
+            {Role::Match, "\033[38;2;95;175;255m"}, {Role::FileName, "\033[38;2;238;238;238m"},
+            {Role::LineNumber, "\033[38;2;0;135;175m"}, {Role::StatValue, "\033[38;2;175;95;175m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;95;175m"}, {Role::Warning, "\033[38;2;0;95;135m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 9. DustyPastels (87afd7, ffd7ff, ffffd7, ffd7af)
+        AllThemes["DustyPastels"] = {
+            {Role::Title, "\033[38;2;135;175;215m"}, {Role::Question, "\033[38;2;255;215;255m"},
+            {Role::MenuNum, "\033[38;2;255;255;215m"}, {Role::MenuItem, "\033[38;2;255;215;175m"},
+            {Role::Match, "\033[38;2;255;215;255m"}, {Role::FileName, "\033[38;2;135;175;215m"},
+            {Role::LineNumber, "\033[38;2;255;255;215m"}, {Role::StatValue, "\033[38;2;135;175;215m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;255;215;175m"}, {Role::Warning, "\033[38;2;255;255;215m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 10. CaramelPastels (87d787, afd7d7, ffffd7, ffd75f, 5f87d7)
+        AllThemes["CaramelPastels"] = {
+            {Role::Title, "\033[38;2;135;215;135m"}, {Role::Question, "\033[38;2;175;215;215m"},
+            {Role::MenuNum, "\033[38;2;255;255;215m"}, {Role::MenuItem, "\033[38;2;255;215;95m"},
+            {Role::Match, "\033[38;2;95;135;215m"}, {Role::FileName, "\033[38;2;175;215;215m"},
+            {Role::LineNumber, "\033[38;2;255;215;95m"}, {Role::StatValue, "\033[38;2;135;215;135m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;255;215;95m"}, {Role::Warning, "\033[38;2;255;255;215m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 11. ForestCamo (005f87, 005f5f, 8787af, d7af87, 87875f)
+        AllThemes["ForestCamo"] = {
+            {Role::Title, "\033[38;2;0;95;135m"}, {Role::Question, "\033[38;2;0;95;95m"},
+            {Role::MenuNum, "\033[38;2;135;135;175m"}, {Role::MenuItem, "\033[38;2;215;175;135m"},
+            {Role::Match, "\033[38;2;135;135;95m"}, {Role::FileName, "\033[38;2;0;95;135m"},
+            {Role::LineNumber, "\033[38;2;135;135;175m"}, {Role::StatValue, "\033[38;2;0;95;95m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;215;175;135m"}, {Role::Warning, "\033[38;2;135;135;95m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 12. NeonDawn (af5faf, 87afaf, 00d7af, ff875f, ffd787)
+        AllThemes["NeonDawn"] = {
+            {Role::Title, "\033[38;2;175;95;175m"}, {Role::Question, "\033[38;2;135;175;175m"},
+            {Role::MenuNum, "\033[38;2;0;215;175m"}, {Role::MenuItem, "\033[38;2;255;135;95m"},
+            {Role::Match, "\033[38;2;255;215;135m"}, {Role::FileName, "\033[38;2;0;215;175m"},
+            {Role::LineNumber, "\033[38;2;255;135;95m"}, {Role::StatValue, "\033[38;2;175;95;175m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;255;135;95m"}, {Role::Warning, "\033[38;2;255;215;135m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 13. LilacHaze (585858, af005f)
+        AllThemes["LilacHaze"] = {
+            {Role::Title, "\033[38;2;88;88;88m"}, {Role::Question, "\033[38;2;175;0;95m"},
+            {Role::MenuNum, "\033[38;2;88;88;88m"}, {Role::MenuItem, "\033[38;2;175;0;95m"},
+            {Role::Match, "\033[38;2;175;0;95m"}, {Role::FileName, "\033[38;2;88;88;88m"},
+            {Role::LineNumber, "\033[38;2;175;0;95m"}, {Role::StatValue, "\033[38;2;88;88;88m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;0;95m"}, {Role::Warning, "\033[38;2;88;88;88m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 14. DarkAristocracy (5f5f00, 875f00, af5f00, d7875f)
+        AllThemes["DarkAristocracy"] = {
+            {Role::Title, "\033[38;2;95;95;0m"}, {Role::Question, "\033[38;2;135;95;0m"},
+            {Role::MenuNum, "\033[38;2;175;95;0m"}, {Role::MenuItem, "\033[38;2;215;135;95m"},
+            {Role::Match, "\033[38;2;175;95;0m"}, {Role::FileName, "\033[38;2;135;95;0m"},
+            {Role::LineNumber, "\033[38;2;215;135;95m"}, {Role::StatValue, "\033[38;2;95;95;0m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;175;95;0m"}, {Role::Warning, "\033[38;2;215;135;95m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+
+        // 15. EmeraldDew (00875f, 5faf5f, 00afff, afd7d7, eeeeee)
+        AllThemes["EmeraldDew"] = {
+            {Role::Title, "\033[38;2;0;135;95m"}, {Role::Question, "\033[38;2;95;175;95m"},
+            {Role::MenuNum, "\033[38;2;0;175;255m"}, {Role::MenuItem, "\033[38;2;175;215;215m"},
+            {Role::Match, "\033[38;2;238;238;238m"}, {Role::FileName, "\033[38;2;0;175;255m"},
+            {Role::LineNumber, "\033[38;2;95;175;95m"}, {Role::StatValue, "\033[38;2;0;135;95m"},
+            {Role::Dim, "\033[2m"}, {Role::Error, "\033[38;2;0;135;95m"}, {Role::Warning, "\033[38;2;95;175;95m"},
+            {Role::Default, ""}, {Role::Reset, "\033[0m"}
+        };
+    }
+
+    // Применение темы по имени
+    inline void ApplyTheme(const std::string& themeName) {
+        current_theme.clear();
+        auto it = AllThemes.find(themeName);
+        if (it != AllThemes.end()) {
+            current_theme = it->second;
+        } else {
+            current_theme = AllThemes["default"]; // Если не нашли, ставим дефолт
+        }
+    }
+
+    inline const std::string& GetColor(Role role) {
+        static const std::string empty = "";
+        if (role == Role::Reset) return current_theme[Role::Reset];
+        auto it = current_theme.find(role);
+        return (it != current_theme.end()) ? it->second : empty;
+    }
 }
 
-======================================================================
-# ФАЙЛ: dsfdfd.cs
-======================================================================
-
-// ============================================================
-// ТЕСТОВЫЙ ФАЙЛ для CodeSearch (C++)
-// Проверка всех 6 типов поиска
-// ============================================================
-
-using System;
-using System.Collections.Generic;
-using System.Linq.Expressions;
-using System.Text.RegularExpressions;
-
-namespace TestProject
-{
-    // ============================================================
-    // ТИП 1. СЛОВО С ГРАНИЦАМИ
-    // ============================================================
-
-    public class UserService
-    {
-        public string username = "admin";          // "name" внутри username
-        public string Name = "Test";                // регистр другой
-        public string filename = "test.txt";        // внутри filename
-
-        public void SetName(string name)            // ← цель
-        {
-            var nameofVar = nameof(name);           // внутри nameof
-            Console.WriteLine(name);                // и этот "name"
-        }
-
-        public void Save() { }
-        public void SaveChanges() { }
-        public void AutoSave() { }
-        public void SaveAll() { }
-    }
-
-    // ============================================================
-    // ТИП 2. ФОРМАТ
-    // ============================================================
-
-    public class DataExamples
-    {
-        // Email
-        public string email1 = "admin@company.com";
-        public string email2 = "help@mail.ru";
-        public string email3 = "developer@yandex-team.ru";
-        public string notEmail = "@no-user.com";
-
-        // URL
-        public string url1 = "https://api.example.com/v1/users";
-        public string url2 = "http://docs.local/page";
-        public string url3 = "https://localhost:5000";
-        public string notUrl = "ftp://files.example.com";
-
-        // IP
-        public string ip1 = "192.168.1.1";
-        public string ip2 = "127.0.0.1";
-        public string ip3 = "10.0.0.1";
-        public string badIp = "192.168.1.1.1";
-
-        // GUID
-        public string guid1 = "550e8400-e29b-41d4-a716-446655440000";
-        public string guid2 = "550E8400-E29B-41D4-A716-446655440000";
-        public string guidBad = "550e8400-e29b-41d4-a716-446655440000-extra";
-
-        // Дата
-        public string date1 = "2024-05-12";
-        public string date2 = "2023-01-01";
-        public string date3 = "12.05.2024";
-        public string date4 = "2024/05/12";
-        public string dateBad = "2024-5-1";
-    }
-
-    // ============================================================
-    // ТИП 3. СТРУКТУРА
-    // ============================================================
-
-    // 3.1. Пустой блок
-
-    public class EmptyBlocks
-    {
-        public void TestCatch()
-        {
-            try
-            {
-                catch
-            }
-            catch { }                                  // ← пустой catch
-
-            try
-            {
-                catch
-            }
-            catch (Exception) { } 
-
-            try
-            {
-                
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);          // ← НЕ пустой
-            }
-        }
-
-        public void EmptyMethod() { }
-
-        public void EmptyMethodMulti()
-        {
-        }
-
-        public class EmptyClass { }
-    }
-
-    // 3.2. X, потом Y, потом Z
-
-    public class Order
-    {
-        public int total;
-        public string customer;
-
-        public void Calculate()
-        {
-            total = 100;
-        }
-    }
-
-    public class BigClass
-    {
-        public int a;
-
-        public void Method1()
-        {
-            if (true)
-            {
-            }
-        } 
-
-        public void Method2()
-        {
-            var str = "const string Green";
-        }
-
-        public int b;
-        public string c;
-
-        public void Method3()
-        {
-            while (true)
-            {
-                break;
-            }
-        }
-    }
-
-    // ============================================================
-    // ТИП 4. КОМБИНИРОВАНИЕ
-    // ============================================================
-
-    public class AsyncTests
-    {
-        public async Task DoWorkAsync() { }
-        public Task ProcessOrder() { return null; }
-        public async Task<int> GetValueAsync() { return 0; }
-        public Task<int> GetUserId() { return null; }
-        public Task<string> GetName() { return null; }
-    }
-
-    public class Comments
-    {
-        // TODO: заменить API
-        // FIXME: падает при пустом вводе
-        // HACK: временное решение
-        // NOTE: не исправлять
-
-        public void Work() { }
-    }
-
-    // ============================================================
-    // ТИП 5. КОЛИЧЕСТВО
-    // ============================================================
-
-    public class Numbers
-    {
-        public int a = 5;
-        public int b = 42;
-        public int c = 999;
-        public int d = 1000;
-        public int e = 12345;
-        public int f = 5000000;
-        public int year = 2024;
-        public int phone = 12345678901;
-    }
-
-    public class LongLines
-    {
-        public string shortLine = "ok";
-        public string mediumLine = "средняя строка";
-        public string longLine = "очень длинная строка, которая точно должна найтись при поиске длинных строк больше 50 символов";
-        public string veryLongLine = "эта строка ещё длиннее, она должна найтись при поиске строк длиннее 50 символов и показать пользователю, что в коде есть проблема со стилем";
-    }
-
-    public class Args
-    {
-        public void A(int x) { }
-        public void B(int x, int y) { }
-        public void C(int x, int y, int z) { }
-        public void D(int x, int y, int z, string a) { }
-        public void E(int x, int y, int z, string a, string b, string c) { }
-    }
-
-    // ============================================================
-    // ТИП 6. КОММЕНТАРИИ
-    // ============================================================
-
-    public class CommentTests
-    {
-        try
-        {
-            
-        }
-
-        catch
-        {
-            
-        }
-        catch (System.Exception)
-        {
-            
-            throw;
-        }
-        // TODO: доработать
-        // FIXME: сломано
-        // HACK: обходной путь
-
-        public int x = 5; // комментарий в конце строки
-        public int y = 10; // ещё один
-
-        // public void OldMethod() { }
-        // var x = 5;
-        // this.Main().Show();
-
-        // Это обычный текстовый комментарий
-        // А это ещё один
-
-        public void Work()
-        {
-            // внутренний комментарий
-            int z = 5; // в конце
-
-        }
-
-    }
+inline std::ostream& operator<<(std::ostream& os, theme::Role role) {
+    os << theme::GetColor(role);
+    return os;
 }
 
 ======================================================================
@@ -500,34 +255,7 @@ namespace TestProject
 ======================================================================
 
 {
-  "favorites": [
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Структура: X=if (строго пусто)",
-      "empty_max_count": 0,
-      "empty_metric": 1,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 0,
-      "name": "if",
-      "number_compare": 1,
-      "pattern": "[empty-block: if, строго пусто]",
-      "quantity_type": 1,
-      "req_type": 1,
-      "structure_type": 1,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "if",
-      "x_not_y_mode": 1,
-      "y": "",
-      "z": ""
-    }
-  ],
+  "favorites": [],
   "max": 50
 }
 
@@ -698,7 +426,7 @@ namespace file_searcher {
             size_t pos = it->position();
             int line = lines.At(pos);
             std::string text = TrimmedLineAt(content, pos);
-            results.push_back({file, line, text});
+            results.push_back({file, line, text, ""});
         }
     }
 
@@ -711,7 +439,7 @@ namespace file_searcher {
             size_t pos = (m.size() > 1 && m[1].matched) ? m.position(1) : m.position();
             int line = lines.At(pos);
             std::string text = TrimmedLineAt(content, pos);
-            results.push_back({file, line, text});
+            results.push_back({file, line, text, ""});
         }
     }
 
@@ -731,7 +459,7 @@ namespace file_searcher {
             for (auto& yr : yRanges) if (xs < yr.second && xe > yr.first) { intersects = true; break; }
             if (intersects) continue;
             int line = lines.At(xs);
-            results.push_back({file, line, TrimmedLineAt(content, xs)});
+            results.push_back({file, line, TrimmedLineAt(content, xs), ""});
         }
     }
 
@@ -889,7 +617,7 @@ namespace file_searcher {
                 size_t en = utf8::SafeCut(trimmed, st + 80);
                 trimmed = "..." + trimmed.substr(st, en - st) + "...";
             }
-            results.push_back({file, lineNum, trimmed});
+            results.push_back({file, lineNum, trimmed, ""});
         }
     }
 
@@ -1280,7 +1008,7 @@ namespace file_searcher {
             auto nextIt = it;
             ++nextIt;
             while (nextIt != std::sregex_iterator() && skipMask[nextIt->position()]) ++nextIt;
-            if (nextIt != std::sregex_iterator() && nextIt->position() < bestOpen) continue;
+            if (nextIt != std::sregex_iterator() && (size_t)nextIt->position() < bestOpen) continue;
 
             seenOpens.insert(bestOpen);
 
@@ -1293,7 +1021,7 @@ namespace file_searcher {
             if (!MatchesEmptyMetric(inner, req)) continue;
 
             int line = lines.At((size_t)it->position());
-            results.push_back({file, line, TrimmedLineAt(content, (size_t)it->position())});
+            results.push_back({file, line, TrimmedLineAt(content, (size_t)it->position()), ""});
         }
     }
 
@@ -1369,7 +1097,7 @@ namespace file_searcher {
         bool usesPattern = !isArgsLength && !isLineLength && !isComments
                    && !isEmptyBlocks && !isCombinationXButNotY;
         if (usesPattern && pattern.empty()) {
-            std::cerr << colors::Error << "Пустое выражение — поиск отменён." << colors::Reset << "\n";
+            std::cerr << theme::Role::Error << "Пустое выражение — поиск отменён." << theme::Role::Reset << "\n";
             return results;
         }
         std::regex lineRx, wholeRx, yRx;
@@ -1383,7 +1111,7 @@ namespace file_searcher {
                 std::string px = regex_builder::EscapeXyzWithBounds(req.X);
                 std::string py = regex_builder::EscapeXyzWithBounds(req.Y);
                 if (px.empty() || py.empty()) {
-                    std::cerr << colors::Error << "Пустое выражение — поиск отменён." << colors::Reset << "\n";
+                    std::cerr << theme::Role::Error << "Пустое выражение — поиск отменён." << theme::Role::Reset << "\n";
                     return results;
                 }
                 wholeRx = std::regex(px, std::regex::multiline | std::regex::optimize);
@@ -1393,7 +1121,7 @@ namespace file_searcher {
                 if (needWholeRx) wholeRx = std::regex(pattern, std::regex::multiline | std::regex::optimize);
             }
         } catch (const std::regex_error& e) {
-            std::cerr << colors::Error << "Ошибка в regex: " << e.what() << colors::Reset << "\n";
+            std::cerr << theme::Role::Error << "Ошибка в regex: " << e.what() << theme::Role::Reset << "\n";
             return results;
         }
 
@@ -1521,7 +1249,7 @@ namespace file_searcher {
       "combination_type": 1,
       "comment_type": 1,
       "comment_word": "",
-      "description": "Слово: alice is lovely woman",
+      "description": "Структура: X=1 (строго пусто)",
       "empty_max_count": 0,
       "empty_metric": 1,
       "exclude": "",
@@ -1530,14 +1258,14 @@ namespace file_searcher {
       "max_count": 0,
       "min_count": 0,
       "number_compare": 1,
-      "pattern": "\\balice is lovely woman\\b",
+      "pattern": "[empty-block: 1, строго пусто]",
       "quantity_type": 1,
-      "req_type": 6,
+      "req_type": 1,
       "structure_type": 1,
-      "type": "6",
-      "word": "alice is lovely woman",
+      "type": "1",
+      "word": "",
       "word_whole": true,
-      "x": "",
+      "x": "1",
       "x_not_y_mode": 1,
       "y": "",
       "z": ""
@@ -1546,7 +1274,7 @@ namespace file_searcher {
       "combination_type": 1,
       "comment_type": 1,
       "comment_word": "",
-      "description": "Структура: X=alice, Y=is lovely, Z=woman",
+      "description": "Структура: X=if (строго пусто)",
       "empty_max_count": 0,
       "empty_metric": 1,
       "exclude": "",
@@ -1555,89 +1283,14 @@ namespace file_searcher {
       "max_count": 0,
       "min_count": 0,
       "number_compare": 1,
-      "pattern": "\\balice\\b[\\s\\S]*?(\\bis lovely\\b)[\\s\\S]*?\\bwoman\\b",
+      "pattern": "[empty-block: if, строго пусто]",
       "quantity_type": 1,
       "req_type": 1,
-      "structure_type": 2,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "alice",
-      "x_not_y_mode": 1,
-      "y": "is lovely",
-      "z": "woman"
-    },
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Структура: X=alice, Y=is good, Z=wo",
-      "empty_max_count": 0,
-      "empty_metric": 1,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 0,
-      "number_compare": 1,
-      "pattern": "\\balice\\b[\\s\\S]*?(\\bis good\\b)[\\s\\S]*?\\bwo\\b",
-      "quantity_type": 1,
-      "req_type": 1,
-      "structure_type": 2,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "alice",
-      "x_not_y_mode": 1,
-      "y": "is good",
-      "z": "wo"
-    },
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Структура: X=alice, Y=is good, Z=woman",
-      "empty_max_count": 0,
-      "empty_metric": 1,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 0,
-      "number_compare": 1,
-      "pattern": "\\balice\\b[\\s\\S]*?(\\bis good\\b)[\\s\\S]*?\\bwoman\\b",
-      "quantity_type": 1,
-      "req_type": 1,
-      "structure_type": 2,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "alice",
-      "x_not_y_mode": 1,
-      "y": "is good",
-      "z": "woman"
-    },
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Количество: цифр в числе N=2",
-      "empty_max_count": 0,
-      "empty_metric": 1,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 2,
-      "number_compare": 1,
-      "pattern": "\\b\\d{3,}\\b",
-      "quantity_type": 1,
-      "req_type": 3,
       "structure_type": 1,
-      "type": "3",
+      "type": "1",
       "word": "",
       "word_whole": true,
-      "x": "",
+      "x": "if",
       "x_not_y_mode": 1,
       "y": "",
       "z": ""
@@ -1646,32 +1299,7 @@ namespace file_searcher {
       "combination_type": 1,
       "comment_type": 1,
       "comment_word": "",
-      "description": "Структура: X=2 (≤ 3 непроб. символов)",
-      "empty_max_count": 3,
-      "empty_metric": 2,
-      "exclude": "",
-      "format_type": 1,
-      "language": "C#",
-      "max_count": 0,
-      "min_count": 0,
-      "number_compare": 1,
-      "pattern": "[empty-block: 2, ≤ 3 непроб. символов]",
-      "quantity_type": 1,
-      "req_type": 1,
-      "structure_type": 1,
-      "type": "1",
-      "word": "",
-      "word_whole": true,
-      "x": "2",
-      "x_not_y_mode": 1,
-      "y": "",
-      "z": ""
-    },
-    {
-      "combination_type": 1,
-      "comment_type": 1,
-      "comment_word": "",
-      "description": "Структура: X=d, Y=d, Z=g",
+      "description": "Структура: X=if (строго пусто)",
       "empty_max_count": 0,
       "empty_metric": 1,
       "exclude": "",
@@ -1680,17 +1308,417 @@ namespace file_searcher {
       "max_count": 0,
       "min_count": 0,
       "number_compare": 1,
-      "pattern": "\\bd\\b[\\s\\S]*?(\\bd\\b)[\\s\\S]*?\\bg\\b",
+      "pattern": "[empty-block: if, строго пусто]",
       "quantity_type": 1,
       "req_type": 1,
-      "structure_type": 2,
+      "structure_type": 1,
       "type": "1",
       "word": "",
       "word_whole": true,
-      "x": "d",
+      "x": "if",
       "x_not_y_mode": 1,
-      "y": "d",
-      "z": "g"
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=ша (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: ша, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "ша",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=ша (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: ша, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "ша",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=ша (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: ша, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "ша",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=if (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: if, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "if",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
+    },
+    {
+      "combination_type": 1,
+      "comment_type": 1,
+      "comment_word": "",
+      "description": "Структура: X=fgd (строго пусто)",
+      "empty_max_count": 0,
+      "empty_metric": 1,
+      "exclude": "",
+      "format_type": 1,
+      "language": "C#",
+      "max_count": 0,
+      "min_count": 0,
+      "number_compare": 1,
+      "pattern": "[empty-block: fgd, строго пусто]",
+      "quantity_type": 1,
+      "req_type": 1,
+      "structure_type": 1,
+      "type": "1",
+      "word": "",
+      "word_whole": true,
+      "x": "fgd",
+      "x_not_y_mode": 1,
+      "y": "",
+      "z": ""
     }
   ],
   "max": 20
@@ -1700,6 +1728,8 @@ namespace file_searcher {
 # ФАЙЛ: main.cpp
 ======================================================================
 
+
+#include <cstdio>
 #include <iostream>
 #include <string>
 #include <filesystem>
@@ -1737,6 +1767,22 @@ bool CopyToClipboard(const std::string& text) {
     SetClipboardData(CF_UNICODETEXT, hMem);
     CloseClipboard();
     return true;
+#elif defined(__APPLE__)
+    FILE* pipe = popen("pbcopy", "w");
+    if (!pipe) return false;
+    size_t written = fwrite(text.data(), 1, text.size(), pipe);
+    int status = pclose(pipe);
+    return written == text.size() && status == 0;
+#elif defined(__linux__)
+    const char* cmd = nullptr;
+    if (getenv("WAYLAND_DISPLAY"))      cmd = "wl-copy";
+    else if (getenv("DISPLAY"))         cmd = "xclip -selection clipboard";
+    if (!cmd) return false;
+    FILE* pipe = popen(cmd, "w");
+    if (!pipe) return false;
+    size_t written = fwrite(text.data(), 1, text.size(), pipe);
+    int status = pclose(pipe);
+    return written == text.size() && status == 0;
 #else
     (void)text;
     return false;
@@ -1753,7 +1799,7 @@ std::string ReadClipboard() {
         if (w) {
             int size = WideCharToMultiByte(CP_UTF8, 0, w, -1, nullptr, 0, nullptr, nullptr);
             if (size > 0) {
-                std::string buf(size, 0);              // size, не size-1 — сюда пишется ровно size байт с '\0'
+                std::string buf(size, 0);
                 WideCharToMultiByte(CP_UTF8, 0, w, -1, &buf[0], size, nullptr, nullptr);
                 buf.resize(size - 1);
                 result = buf;
@@ -1763,12 +1809,39 @@ std::string ReadClipboard() {
     }
     CloseClipboard();
     return result;
+#elif defined(__APPLE__)
+    FILE* pipe = popen("pbpaste", "r");
+    if (!pipe) return "";
+    std::string result;
+    char buffer[4096];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+        result.append(buffer, n);
+    }
+    pclose(pipe);
+    return result;
+#elif defined(__linux__)
+    const char* cmd = nullptr;
+    if (getenv("WAYLAND_DISPLAY"))      cmd = "wl-paste";
+    else if (getenv("DISPLAY"))         cmd = "xclip -selection clipboard -o";
+    if (!cmd) return "";
+    FILE* pipe = popen(cmd, "r");
+    if (!pipe) return "";
+    std::string result;
+    char buffer[4096];
+    size_t n;
+    while ((n = fread(buffer, 1, sizeof(buffer), pipe)) > 0) {
+        result.append(buffer, n);
+    }
+    pclose(pipe);
+    return result;
 #else
     return "";
 #endif
 }
 
 bool CopyAndRemember(const std::string& text, const std::string& source) {
+    (void)source;   // параметр для совместимости, не используется
     std::string oldText = ReadClipboard();
     bool ok = CopyToClipboard(text);
     if (ok && !oldText.empty() && oldText != text) {
@@ -1782,7 +1855,7 @@ static std::string PluralMatches(int n);
 
 void ShowResults(const std::vector<file_searcher::SearchResult>& results, const file_searcher::SearchOptions& options, int limit) {
     if (results.empty()) {
-        std::cout << colors::Dim << "(ничего не найдено)" << colors::Reset << "\n";
+        std::cout << theme::Role::Dim << "(ничего не найдено)" << theme::Role::Reset << "\n";
         return;
     }
     size_t shown = std::min((size_t)limit, results.size());
@@ -1790,13 +1863,16 @@ void ShowResults(const std::vector<file_searcher::SearchResult>& results, const 
         std::string rel;
         try { rel = ToUtf8(fs::relative(results[i].File, options.Directory)); }
         catch (...) { rel = ToUtf8(results[i].File); }
-        std::cout << colors::File << rel << colors::Reset << ":" << colors::LineNumber << results[i].Line << colors::Reset << ": ";
-        if (!results[i].Kind.empty()) std::cout << "[" << results[i].Kind << "] ";
-                std::cout << colors::MatchText << results[i].Text << colors::Reset;
+        std::cout << theme::Role::FileName << rel << ":" 
+            << theme::Role::LineNumber << results[i].Line << ": ";
+        if (!results[i].Kind.empty()) 
+            std::cout << theme::Role::Dim << "[" << results[i].Kind << "] " << theme::Role::Reset;
+        
+        std::cout << theme::Role::Match << results[i].Text << theme::Role::Reset;
         if (results[i].MatchCount > 1)
-            std::cout << colors::Dim << " (" << results[i].MatchCount << " "
-                      << PluralMatches(results[i].MatchCount) << ")" << colors::Reset;
-        std::cout << "\n"; 
+            std::cout << theme::Role::Dim << " (" << results[i].MatchCount << " "
+                      << PluralMatches(results[i].MatchCount) << ")" << theme::Role::Reset;
+        std::cout << theme::Role::Reset << "\n"; 
     }
 }
 
@@ -1817,12 +1893,14 @@ void PrintTotals(const std::vector<file_searcher::SearchResult>& results) {
     }
     int files = (int)uniqueFiles.size();
     int count = (int)results.size();
-    std::cout << colors::Totals << "Найдено в файлах: " << files << colors::Reset << "\n";
-    std::string color;
-    if (count < 100) color = colors::Totals;
-    else if (count < 500) color = colors::Warning;
-    else color = colors::Error;
-    std::cout << color << "Всего найдено: " << count << colors::Reset << "\n";
+    
+    std::cout << theme::Role::Question << "Найдено в файлах: " << theme::Role::StatValue << files << theme::Role::Reset << "\n";
+    
+    theme::Role countColor = theme::Role::StatValue;
+    if (count >= 500) countColor = theme::Role::Error;
+    else if (count >= 100) countColor = theme::Role::Warning;
+    
+    std::cout << theme::Role::Question << "Всего найдено: " << countColor << count << theme::Role::Reset << "\n";
 }
 
 static std::string DescribeRequest(const regex_builder::SearchRequest& req) {
@@ -1977,25 +2055,26 @@ static void RestoreRequest(regex_builder::SearchRequest& req, const settings::Fa
 }
 
 static void ShowHistoryList() {
-    std::cout << "\n=== ИСТОРИЯ ===\n\n";
+    std::cout << "\n" << theme::Role::Title << "=== ИСТОРИЯ ===\n\n" << theme::Role::Reset;
     size_t N = settings::History.size();
     for (size_t i = N; i > 0; --i) {
-        std::cout << "  " << i << ". " << settings::History[i - 1].Description << "\n";
-        std::cout << "     " << settings::History[i - 1].Pattern << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << i << "." 
+                  << theme::Role::FileName << " " << settings::History[i - 1].Description << theme::Role::Reset << "\n";
+        std::cout << "     " << theme::Role::Match << settings::History[i - 1].Pattern << theme::Role::Reset << "\n\n";
     }
 }
 
 static void ShowFavoritesList() {
-    std::cout << "\n=== ИЗБРАННОЕ ===\n\n";
+    std::cout << "\n" << theme::Role::Title << "=== ИЗБРАННОЕ ===\n\n" << theme::Role::Reset;
     size_t N = settings::Favorites.size();
     for (size_t i = N; i > 0; --i) {
-        std::cout << "  " << i << ". " << settings::Favorites[i - 1].Name << "\n";
-        std::cout << "     " << settings::Favorites[i - 1].Pattern << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << i << "." << theme::Role::FileName << " " << settings::Favorites[i - 1].Pattern << theme::Role::Reset << "\n";
+        std::cout << "     " << theme::Role::Match << settings::Favorites[i - 1].Name << theme::Role::Reset << "\n\n";
     }
 }
 
 static void ShowClipboardList() {
-    std::cout << "\n=== ИСТОРИЯ БУФЕРА ===\n\n";
+    std::cout << theme::Role::Title << "\n=== ИСТОРИЯ БУФЕРА ===\n" << theme::Role::Reset << "\n";
     size_t N = settings::ClipboardHistory.size();
     for (size_t i = N; i > 0; --i) {
         const auto& c = settings::ClipboardHistory[i - 1];
@@ -2005,8 +2084,8 @@ static void ShowClipboardList() {
             preview = preview.substr(0, cut) + "...";
         }
         for (auto& ch : preview) if (ch == '\n' || ch == '\r') ch = ' ';
-        std::cout << "  " << i << ". [" << c.Time << "] (" << c.Source << ")\n";
-        std::cout << "     " << preview << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << i << "." << theme::Role::FileName << " [" << c.Time << "] (" << c.Source << ")" << theme::Role::Reset << "\n";
+        std::cout << "     " << theme::Role::Match << preview << theme::Role::Reset << "\n\n";
     }
 }
 
@@ -2037,18 +2116,18 @@ static bool SaveResultsToFile(const std::vector<file_searcher::SearchResult>& re
 }
 
 void PrintActionMenu(bool isInFavorites, bool hasResults) {
-    std::cout << colors::MenuHeader << "Выберите действие:" << colors::Reset << "\n";
-    std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Изменить условия\n";
-    std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Скопировать в буфер\n";
-    std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Начать поиск\n";
-    std::cout << "  " << colors::MenuNumber << "4." << colors::Reset << " Избранное\n";
-    std::cout << "  " << colors::MenuNumber << "5." << colors::Reset << " Добавить в избранное\n";
-    std::cout << "  " << colors::MenuNumber << "6." << colors::Reset << " История поисков\n";
-    std::cout << "  " << colors::MenuNumber << "7." << colors::Reset << " История буфера\n";
-    std::cout << "  " << colors::MenuNumber << "8." << colors::Reset << " Настройки\n";
-    if (isInFavorites) std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Удалить из избранного\n";
-    if (hasResults)   std::cout << "  " << colors::MenuNumber << "9." << colors::Reset << " Выписать в файл\n";
-    std::cout << "> ";
+    std::cout << theme::Role::Question << "Выберите действие:\n" << theme::Role::Reset;
+    std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Изменить условия\n";
+    std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Скопировать в буфер\n";
+    std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Начать поиск\n";
+    std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Избранное\n";
+    std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Добавить в избранное\n";
+    std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " История поисков\n";
+    std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " История буфера\n";
+    std::cout << "  " << theme::Role::MenuNum << "8." << theme::Role::Default << " Настройки\n";
+    if (isInFavorites) std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Удалить из избранного\n";
+    if (hasResults)   std::cout << "  " << theme::Role::MenuNum << "9." << theme::Role::Default << " Выписать в файл\n";
+    std::cout << theme::Role::Question << theme::Role::Match << "> " << theme::Role::Reset;
 }
 
 void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
@@ -2066,7 +2145,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
 
     while (!restart) {
         if (printMenu) { PrintActionMenu(isPatternInFavorites(pattern), hasResults); printMenu = false; }
-        else std::cout << "> ";
+        else std::cout << theme::Role::Question << "> " << theme::Role::Reset;
 
         std::string choice;
         std::getline(std::cin, choice);
@@ -2091,69 +2170,59 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             bool isXButNotY    = (req.Type == regex_builder::SearchType::Combination && req.Combination == regex_builder::CombinationType::XButNotY);
             bool isComments    = (req.Type == regex_builder::SearchType::Comment);
             if (isArgsLength || isLineLength || isEmptyBlocks || isXButNotY || isComments)
-                std::cout << "(специальный режим — regex не используется)\n\n";
+                std::cout << theme::Role::Dim << "(специальный режим — regex не используется)\n\n" << theme::Role::Reset;
             else {
-                if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
-                else std::cout << "(буфер недоступен)\n";
-                std::cout << "\n";
+                if (CopyAndRemember(pattern, "search")) std::cout << theme::Role::Error << "(скопировано в буфер)\n" << theme::Role::Reset;
+                else std::cout << theme::Role::Error << "(буфер недоступен)\n" << theme::Role::Reset;
+                std::cout << theme::Role::Reset << "\n";
             }
         }
         else if (choice == "3") {
             file_searcher::SearchOptions options;
             if (!prompt::AskSearchOptions(options, req)) continue;
-            std::cout << "\nПоиск...\n\n";
             size_t fileCount = 0;
             size_t skippedCount = 0;
             auto results = file_searcher::Search(req, pattern, options, &fileCount, &skippedCount);
-            std::cout << "Найдено файлов: " << fileCount << "\n";
+                std::cout << theme::Role::Question << "\nНайдено файлов: " << theme::Role::StatValue << fileCount << theme::Role::Reset << "\n";
             if (skippedCount > 0) {
-                std::cout << colors::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << colors::Reset;
+                std::cout << theme::Role::Warning << "(Пропущено файлов из-за ошибок доступа: " << skippedCount << ")\n" << theme::Role::Reset;
             }
-            std::cout << "\n";
+            std::cout << theme::Role::Reset << "\n";
             ShowResults(results, options, options.ShowFirstN);
-            if ((int)results.size() > options.ShowFirstN) std::cout << "... и ещё " << (results.size() - options.ShowFirstN) << "\n";
-            std::cout << "\n";
+            if ((int)results.size() > options.ShowFirstN) std::cout << theme::Role::Dim << "... и ещё " << (results.size() - options.ShowFirstN) << theme::Role::Reset << "\n";
+            std::cout << theme::Role::Reset << "\n";
             PrintTotals(results);
-            std::cout << "\n";
+            std::cout << theme::Role::Reset << "\n";
 
             lastResults = results;
             lastOptions = options;
             hasResults = true;
         }
-        else if (choice == "4") {
-            if (settings::Favorites.empty()) {
-                std::cout << "\nИзбранное пусто.\n";
-                std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Перейти в историю поисков\n";
-                std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
-                std::string sub;
-                std::getline(std::cin, sub);
-                size_t sa = sub.find_first_not_of(" \t\r\n");
-                size_t sb = sub.find_last_not_of(" \t\r\n");
-                if (sa == std::string::npos) continue;
-                sub = sub.substr(sa, sb - sa + 1);
-                if (sub == "1") {
-                    if (settings::History.empty()) { std::cout << "\nИстория пуста.\n\n"; continue; }
-                    ShowHistoryList();
-                    std::cout << "Введите номер элемента, чтобы перейти в поиск (0 — назад): ";
-                    int k = prompt::ReadInt(0, (int)settings::History.size());
-                    if (k == 0) continue;
-                    auto& h = settings::History[k - 1];
-                    pattern = h.Pattern;
-                    RestoreRequest(req, h);
-                    hasResults = false;
-                    lastResults.clear();
-                    std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-                    if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
-                    std::cout << "\n";
-                }
-                std::cout << "\n";
-                continue;
+        else if (choice == "4") { if (settings::Favorites.empty()) { std::cout << "\n" << theme::Role::Error << "Избранное пусто.\n\n"; std::cout << theme::Role::Question << "Выберите действие:\n" << theme::Role::Reset; std::cout << " " << theme::Role::MenuNum << "1." << theme::Role::MenuNum << " Перейти в историю поисков\n"; std::cout << " " << theme::Role::MenuNum << "0." << theme::Role::MenuNum << " Назад" << theme::Role::Question << ">\n"; std::string sub; std::getline(std::cin, sub); size_t sa = sub.find_first_not_of(" \t\r\n"); size_t sb = sub.find_last_not_of(" \t\r\n"); if (sa == std::string::npos || sub.substr(sa, sb - sa + 1) == "0") { continue; }
+            sub = sub.substr(sa, sb - sa + 1);
+            if (sub == "1") {
+                if (settings::History.empty()) { std::cout << theme::Role::Warning << "\nИстория пуста.\n" << theme::Role::Reset << "\n"; }
+                ShowHistoryList();
+                std::cout << theme::Role::Question << "Введите номер элемента, чтобы перейти в поиск (0 — назад): " << theme::Role::Reset;
+                int k = prompt::ReadInt(0, (int)settings::History.size());
+                if (k == 0) continue;
+                auto& h = settings::History[k - 1];
+                pattern = h.Pattern;
+                RestoreRequest(req, h);
+                hasResults = false;
+                lastResults.clear();
+                std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+                if (CopyAndRemember(pattern, "history")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+                std::cout << theme::Role::Reset << "\n";
+            }
+            std::cout << theme::Role::Reset << "\n";
+            continue;
             }
             ShowFavoritesList();
-            std::cout << "Выберите действие:\n";
-            std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Перейти в поиск по элементу\n";
-            std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Удалить из избранного\n";
-            std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
+            std::cout << theme::Role::Question << "Выберите действие:\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::MenuNum << " Перейти в поиск по элементу\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::MenuNum << " Удалить из избранного\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::MenuNum << " Назад\n" << theme::Role::Question << "> ";
             std::string sub;
             std::getline(std::cin, sub);
             size_t sa = sub.find_first_not_of(" \t\r\n");
@@ -2162,7 +2231,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             sub = sub.substr(sa, sb - sa + 1);
             if (sub == "0") continue;
             if (sub == "1") {
-                std::cout << "Введите номер элемента (0 — назад): ";
+                std::cout << theme::Role::Question << "Введите номер элемента (0 — назад): " << theme::Role::Reset;
                 int k = prompt::ReadInt(0, (int)settings::Favorites.size());
                 if (k == 0) continue;
                 auto& f = settings::Favorites[k - 1];
@@ -2170,22 +2239,22 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 RestoreRequest(req, f);
                 hasResults = false;
                 lastResults.clear();
-                std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-                if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
-                std::cout << "\n";
+                std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+                if (CopyAndRemember(pattern, "favorite")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+                std::cout << theme::Role::Reset << "\n";
             } else if (sub == "2") {
-                std::cout << "\nВведите номер для удаления (0 — назад): ";
+                std::cout << theme::Role::Question << "\nВведите номер для удаления (0 — назад): " << theme::Role::Reset;
                 int k = prompt::ReadInt(0, (int)settings::Favorites.size());
                 if (k == 0) continue;
                 std::string removedName = settings::Favorites[k - 1].Name;
                 settings::Favorites.erase(settings::Favorites.begin() + (k - 1));
                 settings::SaveFavorites();
-                std::cout << "\nУдалено из избранного: " << removedName << "\n\n";
+                std::cout << theme::Role::Error << "\nУдалено из избранного: " << theme::Role::FileName << removedName << "\n\n";
             }
         }
         else if (choice == "5") {
             settings::FavoriteEntry f;
-            std::cout << "\nИмя записи (Enter — название по умолчанию, 0 — назад): ";
+            std::cout << theme::Role::Question << "\nИмя записи (Enter — название по умолчанию, 0 — назад): " << theme::Role::Reset;
             std::string name;
             std::getline(std::cin, name);
             size_t a = name.find_first_not_of(" \t\r\n");
@@ -2198,12 +2267,12 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             FillFavoriteEntry(f, req, pattern, name);
             settings::AddToFavorites(f);
             settings::SaveFavorites();
-            std::cout << "\nДобавлено в избранное: " << f.Name << "\n\n";
+            std::cout << theme::Role::Error << "\nДобавлено в избранное: " << theme::Role::FileName << f.Name << "\n\n";
         }
         else if (choice == "6") {
-            if (settings::History.empty()) { std::cout << "\nИстория пуста.\n\n"; continue; }
+            if (settings::History.empty()) { std::cout << theme::Role::Warning << "\nИстория пуста.\n" << theme::Role::Reset << "\n"; continue; }
             ShowHistoryList();
-            std::cout << "Введите номер элемента, чтобы перейти в поиск (0 — назад): ";
+            std::cout << theme::Role::Question << "Введите номер элемента, чтобы перейти в поиск (0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::History.size());
             if (k == 0) continue;
             auto& h = settings::History[k - 1];
@@ -2211,18 +2280,18 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             RestoreRequest(req, h);
             hasResults = false;
             lastResults.clear();
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-            if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
-            std::cout << "\n";
+            std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+            if (CopyAndRemember(pattern, "history")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+            std::cout << theme::Role::Reset << "\n";
         }
-        else if (choice == "7") {
-            if (settings::ClipboardHistory.empty()) { std::cout << "\nИстория буфера пуста.\n\n"; continue; }
+        else if (choice == "7") {	
+            if (settings::ClipboardHistory.empty()) { std::cout << theme::Role::Error << "\nИстория буфера пуста.\n" << theme::Role::Reset << "\n"; continue; }
             ShowClipboardList();
-            std::cout << "Восстановить в буфер? (номер, 0 — назад): ";
+            std::cout << theme::Role::Question << "Восстановить в буфер? (номер, 0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::ClipboardHistory.size());
-            if (k == 0) continue;
-            if (CopyToClipboard(settings::ClipboardHistory[k - 1].Text)) std::cout << "\nВосстановлено в буфер.\n\n";
-            else std::cout << "\nБуфер недоступен.\n\n";
+            if (k == 0) continue;	
+            if (CopyToClipboard(settings::ClipboardHistory[k - 1].Text)) std::cout << theme::Role::Default << "\nВосстановлено в буфер.\n" << theme::Role::Reset << "\n";
+            else std::cout << theme::Role::Error << "\nБуфер недоступен.\n" << theme::Role::Reset << "\n";
         }
         else if (choice == "8") { prompt::EditSettings(); }
 
@@ -2231,11 +2300,11 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
             fs::path saveDir = fs::current_path();
 
             while (true) {
-                std::cout << "\nВыписать результаты в файл:\n";
-                std::cout << "  " << colors::MenuNumber << "1." << colors::Reset << " Сохранить\n";
-                std::cout << "  " << colors::MenuNumber << "2." << colors::Reset << " Название файла: " << saveFile << "\n";
-                std::cout << "  " << colors::MenuNumber << "3." << colors::Reset << " Директория: " << utf8::ToUtf8(saveDir) << "\n";
-                std::cout << "  " << colors::MenuNumber << "0." << colors::Reset << " Назад\n> ";
+                std::cout << "\n" << theme::Role::Question << "Выписать результаты в файл:\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Reset << " Сохранить\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Reset << " Название файла: " << saveFile << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Reset << " Директория: " << utf8::ToUtf8(saveDir) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Назад\n" << theme::Role::Question << "> ";
 
                 std::string sub;
                 std::getline(std::cin, sub);
@@ -2249,17 +2318,17 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 if (sub == "1") {
                     fs::path fullPath = saveDir / utf8::FromUtf8(saveFile);
                     if (fs::exists(fullPath)) {
-                        std::cout << "Файл " << saveFile << " уже существует. Перезаписать? (y/n): ";
+                        std::cout << theme::Role::Question << "Файл " << saveFile << " уже существует. Перезаписать? (y/n): " << theme::Role::Reset;
                         std::string ans;
                         std::getline(std::cin, ans);
                         for (auto& c : ans) c = (char)std::tolower((unsigned char)c);
                         if (ans != "y" && ans != "yes" && ans != "да") continue;
                     }
                     if (SaveResultsToFile(lastResults, lastOptions, fullPath, DescribeRequest(req))) {
-                        std::cout << "\nСохранено в " << utf8::ToUtf8(fullPath) << " (" << lastResults.size() << " строк).\n\n";
+                        std::cout << "\n" << theme::Role::Question << "Сохранено в " << theme::Role::FileName << utf8::ToUtf8(fullPath) << theme::Role::Question << " (" << theme::Role::StatValue << lastResults.size() << theme::Role::Question << " строк).\n\n" << theme::Role::Reset;
                         break;
                     } else {
-                        std::cout << colors::Error << "Не удалось сохранить файл.\n" << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Не удалось сохранить файл.\n" << theme::Role::Reset << "\n";
                     }
                 }
                 else if (sub == "2") {
@@ -2274,7 +2343,7 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                     } else {
                         fs::path newDir = utf8::FromUtf8(dir);
                         if (fs::exists(newDir) && fs::is_directory(newDir)) saveDir = newDir;
-                        else std::cout << colors::Error << "Директория не найдена.\n" << colors::Reset << "\n";
+                        else std::cout << theme::Role::Error << "Директория не найдена.\n" << theme::Role::Reset << "\n";
                     }
                 }
             }
@@ -2289,11 +2358,11 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
                 }
             }
             if (foundIdx == SIZE_MAX) {
-                std::cout << "\nНе найдено в избранном.\n\n";
+                std::cout << theme::Role::Warning << "\nНе найдено в избранном.\n" << theme::Role::Reset << "\n";
             } else {
                 settings::Favorites.erase(settings::Favorites.begin() + foundIdx);
                 settings::SaveFavorites();
-                std::cout << "\nУдалено из избранного: " << removedName << "\n\n";
+                std::cout << theme::Role::Error << "\nУдалено из избранного: " << theme::Role::FileName << removedName << "\n\n";
             }
         }
     }
@@ -2314,6 +2383,8 @@ int main() {
 #endif
 
     settings::Load("settings.json");
+    theme::InitThemes();
+    theme::ApplyTheme(settings::CurrentTheme);
     settings::LoadHistory();
     settings::LoadFavorites();
     settings::LoadClipboardHistory();
@@ -2325,47 +2396,49 @@ int main() {
 
         if (prompt::WantHistory) {
             prompt::WantHistory = false;
-            if (settings::History.empty()) { std::cout << "\nИстория пуста.\n\n"; continue; }
+            if (settings::History.empty()) { std::cout << theme::Role::Warning << "\nИстория пуста.\n" << theme::Role::Reset << "\n"; continue; }
             ShowHistoryList();
-            std::cout << "Введите номер элемента, чтобы перейти в поиск (0 — назад): ";
+            std::cout << theme::Role::Question << "Введите номер элемента, чтобы перейти в поиск (0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::History.size());
             if (k == 0) continue;
             auto& h = settings::History[k - 1];
             std::string pattern = h.Pattern;
             RestoreRequest(req, h);
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-            if (CopyAndRemember(pattern, "history")) std::cout << "(скопировано в буфер)\n";
-            std::cout << "\n";
+            std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+            if (CopyAndRemember(pattern, "history")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+            std::cout << theme::Role::Reset << "\n";
             RunActionMenu(req, pattern);
             continue;
         }
 
         if (prompt::WantFavorites) {
             prompt::WantFavorites = false;
-            if (settings::Favorites.empty()) { std::cout << "\nИзбранное пусто.\n\n"; continue; }
+            if (settings::Favorites.empty()) { std::cout << theme::Role::Error << "\nИзбранное пусто.\n" << theme::Role::Reset << "\n"; continue; }
             ShowFavoritesList();
-            std::cout << "Введите номер элемента, чтобы перейти в поиск (0 — назад): ";
+            std::cout << theme::Role::Question << "Введите номер элемента, чтобы перейти в поиск (0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::Favorites.size());
             if (k == 0) continue;
             auto& f = settings::Favorites[k - 1];
             std::string pattern = f.Pattern;
             RestoreRequest(req, f);
-            std::cout << "\nВаше выражение:\n  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-            if (CopyAndRemember(pattern, "favorite")) std::cout << "(скопировано в буфер)\n";
-            std::cout << "\n";
+            std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+            if (CopyAndRemember(pattern, "favorite")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+            std::cout << theme::Role::Reset << "\n";
             RunActionMenu(req, pattern);
             continue;
         }
 
         if (prompt::WantClipboardHistory) {
             prompt::WantClipboardHistory = false;
-            if (settings::ClipboardHistory.empty()) { std::cout << "\nИстория буфера пуста.\n\n"; continue; }
+            if (settings::ClipboardHistory.empty()) { std::cout << theme::Role::Error << "\nИстория буфера пуста.\n" << theme::Role::Reset << "\n"; continue; }
             ShowClipboardList();
-            std::cout << "Восстановить в буфер? (номер, 0 — назад): ";
+            std::cout << theme::Role::Question << "Восстановить в буфер? (номер, 0 — назад): " << theme::Role::Reset;
             int k = prompt::ReadInt(0, (int)settings::ClipboardHistory.size());
             if (k == 0) continue;
-            if (CopyToClipboard(settings::ClipboardHistory[k - 1].Text)) std::cout << "\nВосстановлено в буфер.\n\n";
-            else std::cout << "\nБуфер недоступен.\n\n";
+            if (CopyToClipboard(settings::ClipboardHistory[k - 1].Text)) 
+                std::cout << theme::Role::Default << "\nВосстановлено в буфер.\n" << theme::Role::Reset << "\n";
+            else 
+                std::cout << theme::Role::Error << "\nБуфер недоступен.\n" << theme::Role::Reset << "\n";
             continue;
         }
 
@@ -2382,17 +2455,17 @@ int main() {
         settings::SaveHistory();
 
         if (!isStructure && !isCombination) {
-            std::cout << "\nВаше выражение:\n";
+            std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n" << theme::Role::Reset;
             if (isArgsLength) {
-                std::cout << "  (специальный режим: поиск по количеству аргументов, regex не используется)\n\n";
+                std::cout << theme::Role::Dim << " (специальный режим: поиск по количеству аргументов, regex не используется)\n\n" << theme::Role::Reset;
             } else if (req.Type == regex_builder::SearchType::Quantity && req.Quantity == regex_builder::QuantityType::LineLength) {
-                std::cout << "  (специальный режим: поиск по длине строки в символах UTF-8, regex не используется)\n\n";
+                std::cout << theme::Role::Dim << " (специальный режим: поиск по длине строки в символах UTF-8, regex не используется)\n\n" << theme::Role::Reset;
             } else if (isComments) {
-                std::cout << "  (специальный режим: поиск по комментариям, regex не используется)\n\n";
+                std::cout << theme::Role::Dim << " (специальный режим: поиск по комментариям, regex не используется)\n\n" << theme::Role::Reset;
             } else {
-                std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-                if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
-                std::cout << "\n";
+                std::cout << "  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+                if (CopyAndRemember(pattern, "search")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+                std::cout << theme::Role::Reset << "\n";
             }
         }
 
@@ -2401,11 +2474,11 @@ int main() {
         bool isCombinationXOrY = (req.Type == regex_builder::SearchType::Combination &&
                                   req.Combination == regex_builder::CombinationType::XOrY);
 
-        if (isStructureXYZ || isCombinationXOrY) {
-            std::cout << "\nВаше выражение:\n";
-            std::cout << "  " << colors::MatchText << pattern << colors::Reset << "\n\n";
-            if (CopyAndRemember(pattern, "search")) std::cout << "(скопировано в буфер)\n";
-            std::cout << "\n";
+        if (isStructureXYZ || isCombinationXOrY) {	
+            std::cout << "\n" << theme::Role::Question << "Ваше выражение:\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::Match << pattern << theme::Role::Reset << "\n\n";
+            if (CopyAndRemember(pattern, "search")) std::cout << theme::Role::Error << "(скопировано в буфер)" << theme::Role::Reset;
+            std::cout << theme::Role::Reset << "\n";
         }
 
         RunActionMenu(req, pattern);
@@ -2482,7 +2555,7 @@ namespace prompt {
             size_t start = input.find_first_not_of(" \t\r\n");
             size_t end = input.find_last_not_of(" \t\r\n");
             if (start == std::string::npos) {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
                 continue;
             }
             input = input.substr(start, end - start + 1);
@@ -2499,12 +2572,12 @@ namespace prompt {
             }
             catch (...) {}
 
-            std::cout << "> ";
+            std::cout << theme::Role::Question << "> " << theme::Role::Reset;
         }
     }
 
     std::string ReadLine(const std::string& promptText) {
-        std::cout << promptText;
+        std::cout << theme::Role::Question << promptText << theme::Role::Reset;
         GoBack = false; 
         std::string input;
         std::getline(std::cin, input);
@@ -2569,7 +2642,7 @@ namespace prompt {
             req.Word = ReadLine("Введите слово (0 — назад): ");
             if (GoBack) return false;
             if (!req.Word.empty()) break;
-            std::cout << colors::Error << "Слово не может быть пустым." << colors::Reset << "\n";
+            std::cout << theme::Role::Error << "Слово не может быть пустым." << theme::Role::Reset << "\n";
         }
 
         auto w = ReadLine("Искать как отдельное слово? (y/n, Enter — да, 0 — назад): ");
@@ -2584,13 +2657,13 @@ namespace prompt {
     // ============ ТИП 2 ============
 
     static bool AskFormat(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать?\n";
-        std::cout << "  1. Email\n";
-        std::cout << "  2. URL\n";
-        std::cout << "  3. IP-адрес\n";
-        std::cout << "  4. GUID\n";
-        std::cout << "  5. Дата (2024-05-12)\n";
-        std::cout << "  0. Назад\n> ";
+        std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+        std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Email\n";
+        std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " URL\n";
+        std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " IP-адрес\n";
+        std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " GUID\n";
+        std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Дата (2024-05-12)\n";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
         req.Format = (patterns::FormatType)ReadInt(1, 5);
         return !GoBack;
     }
@@ -2599,24 +2672,24 @@ namespace prompt {
 
     static bool AskStructure(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что искать?\n";
-            std::cout << "  1. X, внутри которого пусто\n";
-            std::cout << "  2. X, потом что угодно, потом Y, потом что угодно, потом Z\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X, внутри которого пусто\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " X, потом что угодно, потом Y, потом что угодно, потом Z\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
             req.Structure = (regex_builder::StructureType)ReadInt(1, 2);
             if (GoBack) return false;
 
             if (req.Structure == regex_builder::StructureType::XEmpty) {
-                std::cout << "Выберите параметр:\n";
-                std::cout << "  1. Строго пусто\n";
-                std::cout << "  2. Не более N символов без пробелов\n";
-                std::cout << "  3. Не более N строк\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Выберите параметр:\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Строго пусто\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Не более N символов без пробелов\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Не более N строк\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 req.EmptyMetricValue = (regex_builder::EmptyMetric)ReadInt(1, 3);
                 if (GoBack) continue;
 
                 if (req.EmptyMetricValue != regex_builder::EmptyMetric::StrictlyEmpty) {
-                    std::cout << "Сколько (0 — назад): ";
+                    std::cout << theme::Role::Question << "Сколько (0 — назад): " << theme::Role::Reset;
                     req.EmptyMaxCount = ReadInt(0, 10000);
                     if (GoBack) continue;
                 }
@@ -2625,7 +2698,7 @@ namespace prompt {
                     req.X = ReadLine("Название оператора (0 — назад): ");
                     if (GoBack) break;
                     if (!req.X.empty()) return true;
-                    std::cout << colors::Error << "Не может быть пустым." << colors::Reset << "\n";
+                    std::cout << theme::Role::Error << "Не может быть пустым." << theme::Role::Reset << "\n";
                 }
                 if (GoBack) continue;
                 return true;
@@ -2633,10 +2706,10 @@ namespace prompt {
 
             else {
                 while (true) {
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                         << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                         << " ^ — начало строки, $ — конец строки)"
-                        << colors::Reset << "\n";
+                        << theme::Role::Reset << "\n";
 
                     req.X = ReadLine("X (0 — назад): ");
                     if (GoBack) break;
@@ -2647,15 +2720,15 @@ namespace prompt {
 
                     bool ok = true;
                     if (req.X.empty()) {
-                        std::cout << colors::Error << "X пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "X пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (req.Y.empty()) {
-                        std::cout << colors::Error << "Y пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Y пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (req.Z.empty()) {
-                        std::cout << colors::Error << "Z пуст." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Z пуст." << theme::Role::Reset << "\n";
                         ok = false;
                     }
                     if (ok) return true;
@@ -2669,24 +2742,24 @@ namespace prompt {
 
     static bool AskCombination(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что искать?\n";
-            std::cout << "  1. X, но не Y\n";
-            std::cout << "  2. X или Y или Z\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X, но не Y\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " X или Y или Z\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
             req.Combination = (regex_builder::CombinationType)ReadInt(1, 2);
             if (GoBack) return false;
 
             if (req.Combination == regex_builder::CombinationType::XOrY) {
                 while (true) {
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                               << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                               << " ^ — начало строки, $ — конец строки.\n"
                               << " Если элемент содержит запятую — возьмите его в кавычки \"...\" или '...')"
-                              << colors::Reset << "\n";
+                              << theme::Role::Reset << "\n";
                     req.X = ReadLine("Элементы через запятую (0 — назад): ");
                     if (GoBack) break;
                     if (!QuotesBalanced(req.X)) {
-                        std::cout << colors::Error << "Кавычки не закрыты. Попробуйте снова." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Кавычки не закрыты. Попробуйте снова." << theme::Role::Reset << "\n";
                         continue;
                     }
                     bool hasItem = false;
@@ -2694,7 +2767,7 @@ namespace prompt {
                         if (!std::isspace((unsigned char)c) && c != ',' && c != '"' && c != '\'') { hasItem = true; break; }
                     }
                     if (!hasItem) {
-                        std::cout << colors::Error << "Нужен хотя бы один элемент." << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Нужен хотя бы один элемент." << theme::Role::Reset << "\n";
                         continue;
                     }
                     return true;
@@ -2704,25 +2777,25 @@ namespace prompt {
             else {
                 bool backToTop = false;
                 while (true) {
-                    std::cout << "Как сравнивать X и Y?\n";
-                    std::cout << "  1. X не пересекается с Y (по позиции)\n";
-                    std::cout << "  2. В строке с X нет Y (по строке)\n";
-                    std::cout << "  0. Назад\n> ";
+                    std::cout << theme::Role::Question << "Как сравнивать X и Y?\n" << theme::Role::Reset;
+                    std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " X не пересекается с Y (по позиции)\n";
+                    std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " В строке с X нет Y (по строке)\n";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                     req.XButNotYModeValue = (regex_builder::XButNotYMode)ReadInt(1, 2);
                     if (GoBack) { backToTop = true; break; }
 
-                    std::cout << colors::Dim
+                    std::cout << theme::Role::Dim
                               << "(% — любые пробелы, * — любые символы до первого совпадения,\n"
                               << " ^ — начало строки, $ — конец строки)"
-                              << colors::Reset << "\n";
+                              << theme::Role::Reset << "\n";
                     bool backToSub = false;
                     while (true) {
                         req.X = ReadLine("X (0 — назад): ");
                         if (GoBack) { backToSub = true; break; }
                         req.Y = ReadLine("Y (0 — назад): ");
                         if (GoBack) { backToSub = true; break; }
-                        if (req.X.empty()) { std::cout << colors::Error << "X пуст." << colors::Reset << "\n"; continue; }
-                        if (req.Y.empty()) { std::cout << colors::Error << "Y пуст." << colors::Reset << "\n"; continue; }
+                        if (req.X.empty()) { std::cout << theme::Role::Error << "X пуст." << theme::Role::Reset << "\n"; continue; }
+                        if (req.Y.empty()) { std::cout << theme::Role::Error << "Y пуст." << theme::Role::Reset << "\n"; continue; }
                         req.Exclude = req.Y;
                         return true;
                     }
@@ -2737,33 +2810,32 @@ namespace prompt {
 
     static bool AskQuantity(regex_builder::SearchRequest& req) {
         while (true) {
-            std::cout << "Что ограничить?\n";
-            std::cout << "  1. Количество цифр в числе\n";
-            std::cout << "  2. Длина строки\n";
-            std::cout << "  3. Длина списка аргументов\n";
-            std::cout << "  0. Назад\n> ";
-            req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
+            std::cout << theme::Role::Question << "Что ограничить?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Количество цифр в числе\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Длина строки\n";
+            std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Длина списка аргументов\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";            req.Quantity = (regex_builder::QuantityType)ReadInt(1, 3);
             if (GoBack) return false;
 
-            std::cout << "Как сравнивать?\n";
-            std::cout << "  1. Больше N\n";
-            std::cout << "  2. Равно N\n";
-            std::cout << "  3. Меньше N\n";
-            std::cout << "  4. В диапазоне\n";
-            std::cout << "  0. Назад\n> ";
+            std::cout << theme::Role::Question << "Как сравнивать?\n" << theme::Role::Reset;
+            std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Больше N\n";
+            std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Равно N\n";
+            std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Меньше N\n";
+            std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " В диапазоне\n";
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
             req.NumberCompareValue = (regex_builder::NumberCompare)ReadInt(1, 4);
             if (GoBack) continue;
 
             if (req.NumberCompareValue == regex_builder::NumberCompare::Between) {
-                std::cout << "Минимум (0 — назад): ";
+                std::cout << theme::Role::Question << "Минимум (0 — назад): " << theme::Role::Reset;
                 req.MinCount = ReadInt(1, 10000);
                 if (GoBack) continue;
-                std::cout << "Максимум (0 — назад): ";
+                std::cout << theme::Role::Question << "Максимум (0 — назад): " << theme::Role::Reset;
                 req.MaxCount = ReadInt(req.MinCount, 10000);
                 if (GoBack) continue;
             }
             else {
-                std::cout << "Сколько цифр (0 — назад): ";
+                std::cout << theme::Role::Question << "Сколько цифр (0 — назад): " << theme::Role::Reset;
                 req.MinCount = ReadInt(1, 10000);
                 if (GoBack) continue;
             }
@@ -2774,25 +2846,26 @@ namespace prompt {
     // ============ ТИП 6 ============
 
     static bool AskComment(regex_builder::SearchRequest& req) {
-        std::cout << "Что искать в комментариях?\n";
-        std::cout << "  1. В начале строки\n";
-        std::cout << "  2. В конце строки\n";
-        std::cout << "  3. Все комментарии\n";
-        std::cout << "  0. Назад\n> ";
+        std::cout << theme::Role::Question << "Что искать в комментариях?\n" << theme::Role::Reset;
+        std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " В начале строки\n";
+        std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " В конце строки\n";
+        std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Все комментарии\n";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
         req.Comment = (regex_builder::CommentType)ReadInt(1, 3);
         if (GoBack) return false;
 
         // Выбор языка
         if (settings::FavoriteLanguages.empty()) {
-            std::cout << colors::Error << "Нет доступных языков в настройках." << colors::Reset << "\n";
+            std::cout << theme::Role::Error << "Нет доступных языков в настройках." << theme::Role::Reset << "\n";
             return false;
         }
-        std::cout << "\nВыберите язык:\n";
+        std::cout << "\n" << theme::Role::Question << "Выберите язык:\n" << theme::Role::Reset;
         for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
             const auto& l = settings::FavoriteLanguages[i];
-            std::cout << "  " << (i + 1) << ". " << l.Name << " (" << l.Prefix << ")\n";
+            std::cout << "  " << theme::Role::MenuNum << (i + 1) << "." << theme::Role::Default << " " 
+                      << l.Name << " (" << theme::Role::FileName << l.Prefix << theme::Role::Default << ")\n";
         }
-        std::cout << "  0. Назад\n> ";
+        std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
         int langIdx = ReadInt(1, (int)settings::FavoriteLanguages.size());
         if (GoBack) return false;
         req.Language = settings::FavoriteLanguages[langIdx - 1].Name;
@@ -2803,30 +2876,215 @@ namespace prompt {
         return true;
     }
 
+    // ============ СПРАВКА ============
+
+    static void ShowHelpSection(int n) {
+        switch (n) {
+        case 1:
+            std::cout << "\n=== СТРУКТУРА ===\n\n";
+            std::cout << "Два подрежима:\n\n";
+            std::cout << "1. X, внутри которого пусто\n";
+            std::cout << "   Ищет пустые блоки после ключевого слова.\n\n";
+            std::cout << "   Примеры:\n";
+            std::cout << "     if { }          — найдётся\n";
+            std::cout << "     while { }       — найдётся\n";
+            std::cout << "     if { x; }       — не найдётся (не пусто)\n";
+            std::cout << "     catch { }       — найдётся\n\n";
+            std::cout << "   Метрики пустоты:\n";
+            std::cout << "     - Строго пусто — ни одного непробельного символа\n";
+            std::cout << "     - <= N непробельных символов\n";
+            std::cout << "     - <= N строк\n\n";
+            std::cout << "2. X -> Y -> Z\n";
+            std::cout << "   Ищет \"X, потом Y, потом Z\" в любом порядке через файл.\n\n";
+            std::cout << "   Пример: X=\"alice\", Y=\"is lovely\", Z=\"woman\"\n";
+            std::cout << "   Найдёт: \"alice ... is lovely ... woman\"\n\n";
+            std::cout << "   Спецсимволы в X/Y/Z:\n";
+            std::cout << "     % — любые пробелы (опционально)\n";
+            std::cout << "     * — любые символы до первого совпадения\n";
+            std::cout << "     ^ — начало строки\n";
+            std::cout << "     $ — конец строки\n";
+            break;
+        case 2:
+            std::cout << "\n=== КОМБИНИРОВАНИЕ ===\n\n";
+            std::cout << "1. X, но не Y\n";
+            std::cout << "   Два режима:\n";
+            std::cout << "     - По позиции — X, который не пересекается с Y\n";
+            std::cout << "     - По строке — в строке с X нет Y\n\n";
+            std::cout << "   Пример: X=\"catch\", Y=\"catch (Exception)\"\n";
+            std::cout << "     catch { }              — найдётся\n";
+            std::cout << "     catch (Exception) { }  — НЕ найдётся\n";
+            std::cout << "     catch (MyError) { }    — найдётся\n\n";
+            std::cout << "2. X или Y\n";
+            std::cout << "   Ищет любой из элементов. Список через запятую:\n";
+            std::cout << "     foo, bar, baz\n\n";
+            std::cout << "   Если элемент содержит запятую — в кавычках:\n";
+            std::cout << "     \"foo, bar\", baz\n";
+            break;
+        case 3:
+            std::cout << "\n=== КОЛИЧЕСТВО ===\n\n";
+            std::cout << "1. Количество цифр в числе\n";
+            std::cout << "   Ищет числа с N цифрами.\n\n";
+            std::cout << "   Примеры (N=3):\n";
+            std::cout << "     равно        — \"999\", но не \"99\" и не \"1000\"\n";
+            std::cout << "     больше       — \"1000\", \"12345\", но не \"999\"\n";
+            std::cout << "     меньше       — \"12\", \"5\", но не \"999\"\n";
+            std::cout << "     в диапазоне  — от 10 до 99\n\n";
+            std::cout << "2. Длина строки\n";
+            std::cout << "   Ищет строки длиной N символов (UTF-8).\n\n";
+            std::cout << "   Примеры (N=50):\n";
+            std::cout << "     > 50   — строки длиннее 50\n";
+            std::cout << "     = 50   — ровно 50\n";
+            std::cout << "     < 50   — короче 50\n";
+            std::cout << "     10..50 — от 10 до 50\n\n";
+            std::cout << "3. Длина списка аргументов\n";
+            std::cout << "   Ищет функции/методы/вызовы с N аргументами.\n\n";
+            std::cout << "   Примеры:\n";
+            std::cout << "     foo(a, b)            — 2 аргумента\n";
+            std::cout << "     Foo<int>(1, 2, 3)    — 3 аргумента\n";
+            std::cout << "     p->bar(x)            — 1 аргумент\n";
+            std::cout << "     void f()             — 0 аргументов\n\n";
+            std::cout << "   Показывает [decl] (объявление) или [call] (вызов).\n";
+            break;
+        case 4:
+            std::cout << "\n=== ФОРМАТ ===\n\n";
+            std::cout << "Автоматический поиск типовых форматов:\n\n";
+            std::cout << "  1. Email     — admin@company.com\n";
+            std::cout << "  2. URL       — https://example.com/path\n";
+            std::cout << "  3. IP        — 192.168.1.1\n";
+            std::cout << "  4. GUID      — 550e8400-e29b-41d4-a716-446655440000\n";
+            std::cout << "  5. Дата      — 2024-05-12, 12.05.2024, 2024/05/12\n";
+            break;
+        case 5:
+            std::cout << "\n=== КОММЕНТАРИИ ===\n\n";
+            std::cout << "Поиск слов в комментариях. Три режима:\n\n";
+            std::cout << "  1. В начале строки — комментарий стоит в начале\n";
+            std::cout << "  2. В конце строки  — комментарий стоит в конце строки\n";
+            std::cout << "  3. Все комментарии — любой комментарий\n\n";
+            std::cout << "Язык задаёт префикс:\n";
+            std::cout << "  C#, C++, JS — //\n";
+            std::cout << "  Python      — #\n";
+            std::cout << "  SQL         — --\n\n";
+            std::cout << "Слово для поиска — опционально. Если пусто, найдутся все.\n";
+            break;
+        case 6:
+            std::cout << "\n=== СЛОВО С ГРАНИЦАМИ ===\n\n";
+            std::cout << "Ищет конкретное слово. Можно включить/выключить границы.\n\n";
+            std::cout << "С границами (\\b):\n";
+            std::cout << "  \"name\" — только как отдельное слово\n";
+            std::cout << "  username, filename, nameof — НЕ найдутся\n\n";
+            std::cout << "Без границ:\n";
+            std::cout << "  \"name\" — везде, включая username, filename, nameof\n\n";
+            std::cout << "Совет: для русских слов границы не работают (std::regex).\n";
+            std::cout << "Используйте поиск без границ.\n";
+            break;
+        case 7:
+            std::cout << "\n=== ИЗБРАННОЕ ===\n\n";
+            std::cout << "Сохранённые запросы с именами. В главном меню — пункт 7.\n\n";
+            std::cout << "  - Добавить в избранное — в меню действий после поиска (пункт 5)\n";
+            std::cout << "  - Открыть — главное меню -> 7 -> выбрать элемент\n";
+            std::cout << "  - Удалить — в меню избранного (0) или из меню действий\n\n";
+            std::cout << "Хранится в favorites.json.\n";
+            break;
+        case 8:
+            std::cout << "\n=== ИСТОРИЯ ПОИСКОВ ===\n\n";
+            std::cout << "Все выполненные поиски. В главном меню — пункт 8.\n\n";
+            std::cout << "  - Открыть — главное меню -> 8 -> выбрать элемент\n";
+            std::cout << "  - Восстановить запрос — выберите элемент, вернёт в меню действий\n";
+            std::cout << "  - Ограничение — 20 последних (настраивается)\n\n";
+            std::cout << "Хранится в history.json.\n";
+            break;
+        case 9:
+            std::cout << "\n=== ИСТОРИЯ БУФЕРА ===\n\n";
+            std::cout << "Скопированные выражения. В главном меню — пункт 9.\n\n";
+            std::cout << "  - Что попадает — каждый раз, когда вы копируете выражение\n";
+            std::cout << "  - Восстановить в буфер — выберите элемент, оно попадёт в буфер\n";
+            std::cout << "  - Очистка — старше 24 часов удаляется автоматически\n\n";
+            std::cout << "Хранится в clipboard_history.json.\n";
+            break;
+        case 10:
+            std::cout << "\n=== НАСТРОЙКИ ===\n\n";
+            std::cout << "В главном меню — пункт 0.\n\n";
+            std::cout << "  - Расширения — какие файлы искать (.cs, .cpp, .py, ...)\n";
+            std::cout << "  - Исключённые папки — что пропускать (bin, obj, .git)\n";
+            std::cout << "  - Исключённые файлы — маски (*.g.cs, *.min.js)\n";
+            std::cout << "  - Максимальный размер — лимит в МБ на файл\n";
+            std::cout << "  - Вывод — сколько результатов показывать\n";
+            std::cout << "  - Языки — префиксы комментариев\n\n";
+            std::cout << "Можно создавать наборы (сеты) и переключать их по умолчанию.\n\n";
+            std::cout << "Хранится в settings.json.\n";
+            break;
+        }
+    }
+
+    static void ShowHelp() {
+        std::cout << "\n=== СПРАВКА ===\n\n";
+        std::cout << "CodeSearch — умный поиск по исходному коду.\n";
+        std::cout << "Выберите режим (1-6) или зайдите в историю/избранное.\n";
+        std::cout << "После настройки нажмите «3. Начать поиск» в меню действий.\n";
+        std::cout << "0 в любом запросе — «назад», Ctrl+C — выход.\n\n";
+
+        while (true) {
+            std::cout << "Что конкретнее хотите узнать?\n\n";
+            std::cout << "  1. Структура\n";
+            std::cout << "  2. Комбинирование\n";
+            std::cout << "  3. Количество\n";
+            std::cout << "  4. Формат\n";
+            std::cout << "  5. Комментарии\n";
+            std::cout << "  6. Слово с границами\n";
+            std::cout << "  7. Избранное\n";
+            std::cout << "  8. История поисков\n";
+            std::cout << "  9. История буфера\n";
+            std::cout << "  10. Настройки\n";
+            std::cout << "  0. Назад в главное меню\n> ";
+
+            std::string input;
+            std::getline(std::cin, input);
+
+            size_t s = input.find_first_not_of(" \t\r\n");
+            size_t e = input.find_last_not_of(" \t\r\n");
+            if (s == std::string::npos) return; // пустой Enter — назад
+            input = input.substr(s, e - s + 1);
+
+            std::string lc = input;
+            for (auto& c : lc) c = (char)std::tolower((unsigned char)c);
+            if (lc == "b" || lc == "back" || lc == "назад") return;
+
+            int n = -1;
+            try { n = std::stoi(input); } catch (...) { std::cout << "\n"; continue; }
+
+            if (n == 0) return;
+            if (n < 1 || n > 10) { std::cout << "\n"; continue; }
+
+            ShowHelpSection(n);
+            std::cout << "\n";
+        }
+    }
+
     // ============ ГЛАВНЫЙ МЕТОД ============
 
     regex_builder::SearchRequest Run() {
         regex_builder::SearchRequest req;
         GoBack = false;
-        std::cout << "=== Умный поиск и генератор regex ===\n\n";
+        std::cout << theme::Role::Title << "=== Умный поиск и генератор regex ===\n" << theme::Role::Reset << "\n";
 
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что искать?\n";
-                std::cout << "  1. Структура\n";
-                std::cout << "  2. Комбинирование\n";
-                std::cout << "  3. Количество\n";
-                std::cout << "  4. Формат (email, URL, IP, GUID, дата)\n";
-                std::cout << "  5. Комментарии\n";
-                std::cout << "  6. Слово с границами\n";
-                std::cout << "  7. Избранное\n";
-                std::cout << "  8. История поисков\n";
-                std::cout << "  9. История буфера\n";
-                std::cout << "  0. Настройки\n> ";
+                std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Структура\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Комбинирование\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Количество\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Формат (email, URL, IP, GUID, дата)\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Комментарии\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Слово с границами\n";
+                std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Избранное\n";
+                std::cout << "  " << theme::Role::MenuNum << "8." << theme::Role::Default << " История поисков\n";
+                std::cout << "  " << theme::Role::MenuNum << "9." << theme::Role::Default << " История буфера\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Настройки\n";
+                std::cout << "  " << theme::Role::MenuNum << "help" << theme::Role::Default << " — справка\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -2836,12 +3094,21 @@ namespace prompt {
             if (s == std::string::npos) continue;
             input = input.substr(s, e - s + 1);
 
+            // help / h / ? / справка — регистронезависимо
+            std::string lc = input;
+            for (auto& c : lc) c = (char)std::tolower((unsigned char)c);
+            if (lc == "help" || lc == "h" || lc == "?" || lc == "справка") {
+                ShowHelp();
+                printMenu = true;
+                continue;
+            }
+
             int choice = -1;
             try { choice = std::stoi(input); } catch (...) { continue; }
 
             if (choice == 0) {
                 EditSettings();
-                std::cout << "\n";
+                std::cout << theme::Role::Reset << "\n";
                 printMenu = true;
                 continue;
             }
@@ -2869,7 +3136,7 @@ namespace prompt {
                 case 5: req.Type = regex_builder::SearchType::Comment;     break;
                 case 6: req.Type = regex_builder::SearchType::Word;        break;
             }
-            std::cout << "\n";
+            std::cout << theme::Role::Reset << "\n";
 
             bool ok = false;
             switch (req.Type) {
@@ -2884,7 +3151,7 @@ namespace prompt {
             if (ok) return req;
 
             GoBack = false;
-            std::cout << "\n";
+            std::cout << theme::Role::Reset << "\n";
             printMenu = true;
         }
     }
@@ -2933,10 +3200,12 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& kv : settings::ExtensionSets) {
-            std::cout << "  " << i++ << ". [" << kv.first << "] "
-                      << FormatSet(kv.second) << "\n";
+            std::cout << "  " << theme::Role::MenuNum << i++ << ". ["
+                    << theme::Role::MenuNum << kv.first << "] "
+                    << theme::Role::FileName << FormatSet(kv.second) << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultExtensionSet << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << "По умолчанию: "
+                << theme::Role::FileName << settings::DefaultExtensionSet << "\n\n";
     }
 
     static void EditExtensionSets() {
@@ -2944,15 +3213,15 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что сделать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -2979,10 +3248,10 @@ namespace prompt {
                 auto raw = ReadLine("Расширения через запятую (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExtensionSets[name] = SplitByComma(raw);
-                std::cout << "\nДобавлено.\n\n";
+                std::cout << theme::Role::Error << "\nДобавлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
@@ -3004,21 +3273,21 @@ namespace prompt {
                 } else {
                     settings::ExtensionSets[oldName] = newVals;
                 }
-                std::cout << "\nИзменено.\n\n";
+                std::cout << theme::Role::Error << "\nИзменено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExtensionSets.erase(keys[k - 1]);
-                std::cout << "\nУдалено.\n\n";
+                std::cout << theme::Role::Error << "\nУдалено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExtensionSet = keys[k - 1];
-                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
+                std::cout << "\n" << theme::Role::Error << "По умолчанию: " << theme::Role::FileName << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -3029,10 +3298,12 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& kv : settings::ExcludeDirSets) {
-            std::cout << "  " << i++ << ". [" << kv.first << "] "
-                      << FormatSet(kv.second) << "\n";
+            std::cout << "  " << theme::Role::MenuNum << i++ << ". ["
+                    << theme::Role::MenuNum << kv.first << "] "
+                    << theme::Role::FileName << FormatSet(kv.second) << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultExcludeDirSet << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << "По умолчанию: "
+                << theme::Role::FileName << settings::DefaultExcludeDirSet << "\n\n";
     }
 
     static void EditExcludeDirSets() {
@@ -3040,15 +3311,15 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что сделать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3075,10 +3346,10 @@ namespace prompt {
                 auto raw = ReadLine("Папки через запятую (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeDirSets[name] = SplitByComma(raw);
-                std::cout << "\nДобавлено.\n\n";
+                std::cout << theme::Role::Error << "\nДобавлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
@@ -3100,21 +3371,21 @@ namespace prompt {
                 } else {
                     settings::ExcludeDirSets[oldName] = newVals;
                 }
-                std::cout << "\nИзменено.\n\n";
+                std::cout << theme::Role::Error << "\nИзменено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeDirSets.erase(keys[k - 1]);
-                std::cout << "\nУдалено.\n\n";
+                std::cout << theme::Role::Error << "\nУдалено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExcludeDirSet = keys[k - 1];
-                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
+                std::cout << "\n" << theme::Role::Error << "По умолчанию: " << theme::Role::FileName << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -3125,10 +3396,12 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& kv : settings::ExcludeFileSets) {
-            std::cout << "  " << i++ << ". [" << kv.first << "] "
-                      << FormatSet(kv.second) << "\n";
+            std::cout << "  " << theme::Role::MenuNum << i++ << ". ["
+                    << theme::Role::MenuNum << kv.first << "] "
+                    << theme::Role::FileName << FormatSet(kv.second) << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultExcludeFileSet << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << "По умолчанию: "
+                << theme::Role::FileName << settings::DefaultExcludeFileSet << "\n\n";
     }
 
     static void EditExcludeFileSets() {
@@ -3136,15 +3409,15 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3171,10 +3444,10 @@ namespace prompt {
                 auto raw = ReadLine("Файлы через запятую (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeFileSets[name] = SplitByComma(raw);
-                std::cout << "\nДобавлено.\n\n";
+                std::cout << theme::Role::Error << "\nДобавлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
@@ -3196,21 +3469,21 @@ namespace prompt {
                 } else {
                     settings::ExcludeFileSets[oldName] = newVals;
                 }
-                std::cout << "\nИзменено.\n\n";
+                std::cout << theme::Role::Error << "\nИзменено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::ExcludeFileSets.erase(keys[k - 1]);
-                std::cout << "\nУдалено.\n\n";
+                std::cout << theme::Role::Error << "\nУдалено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::DefaultExcludeFileSet = keys[k - 1];
-                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
+                std::cout << "\n" << theme::Role::Error << "По умолчанию: " << theme::Role::FileName << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -3221,12 +3494,14 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& kv : settings::MaxFileSizeSets) {
-            std::cout << "  " << i++ << ". [" << kv.first << "] "
-                    << (kv.second < 0 ? std::string("без лимита")
-                                        : std::to_string(kv.second) + " МБ")
+            std::cout << "  " << theme::Role::MenuNum << i++ << ". ["
+                    << theme::Role::MenuNum << kv.first << "] "
+                    << theme::Role::FileName 
+                    << (kv.second < 0 ? std::string("без лимита") : std::to_string(kv.second) + " МБ") 
                     << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultMaxFileSizeSet << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << "По умолчанию: "
+                << theme::Role::FileName << settings::DefaultMaxFileSizeSet << "\n\n";
     }
 
     static void EditMaxFileSizeSets() {
@@ -3234,15 +3509,15 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить сет\n";
-                std::cout << "  2. Изменить сет\n";
-                std::cout << "  3. Удалить сет\n";
-                std::cout << "  4. Сменить сет по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что сделать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить сет\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить сет по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3266,13 +3541,13 @@ namespace prompt {
                 std::string name = ReadLine("Имя нового сета (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 if (name.empty()) continue;
-                std::cout << "Размер в МБ (-1 — без лимита, 0 — 0 МБ): ";
+                std::cout << theme::Role::Question << "Размер в МБ (-1 — без лимита, 0 — 0 МБ): " << theme::Role::Reset;
                 int val = ReadInt(-1, 100000);
                 settings::MaxFileSizeSets[name] = val;
-                std::cout << "\nДобавлено.\n\n";
+                std::cout << theme::Role::Error << "\nДобавлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 std::string oldName = keys[k - 1];
@@ -3296,21 +3571,21 @@ namespace prompt {
                 } else {
                     settings::MaxFileSizeSets[oldName] = newVal;
                 }
-                std::cout << "\nИзменено.\n\n";
+                std::cout << theme::Role::Error << "\nИзменено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 3 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::MaxFileSizeSets.erase(keys[k - 1]);
-                std::cout << "\nУдалено.\n\n";
+                std::cout << theme::Role::Error << "\nУдалено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 4 && !keys.empty()) {
-                std::cout << "Введите номер сета: ";
+                std::cout << theme::Role::Question << "Введите номер сета: " << theme::Role::Reset;
                 int k = ReadInt(1, (int)keys.size());
                 if (GoBack) { GoBack = false; continue; }
                 settings::DefaultMaxFileSizeSet = keys[k - 1];
-                std::cout << "\nПо умолчанию: " << keys[k - 1] << "\n\n";
+                std::cout << "\n" << theme::Role::Error << "По умолчанию: " << theme::Role::FileName << keys[k - 1] << "\n\n";
             }
         }
     }
@@ -3321,13 +3596,13 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "\n=== ВЫВОД ===\n\n";
-                std::cout << "  1. Показывать первых: " << settings::ShowFirstN << "\n";
-                std::cout << "  2. Файл результатов: " << settings::ResultsFile << "\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << "\n" << theme::Role::Title << "=== ВЫВОД ===\n\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Показывать первых: " << theme::Role::FileName << settings::ShowFirstN << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Имя файла результатов: " << theme::Role::FileName << settings::ResultsFile << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3345,17 +3620,17 @@ namespace prompt {
             printMenu = true;
 
             if (n == 1) {
-                std::cout << "Сколько (0 — назад): ";
+                std::cout << theme::Role::Question << "Сколько (0 — назад): " << theme::Role::Reset;
                 int v = ReadInt(1, 100000);
                 if (GoBack) { GoBack = false; continue; }
                 settings::ShowFirstN = v;
-                std::cout << "\nУстановлено.\n\n";
+                std::cout << theme::Role::Default << "\nУстановлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2) {
                 auto v = ReadLine("Имя файла (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::ResultsFile = v;
-                std::cout << "\nУстановлено.\n\n";
+                std::cout << theme::Role::Default << "\nУстановлено.\n" << theme::Role::Reset << "\n";
             }
         }
     }
@@ -3366,11 +3641,13 @@ namespace prompt {
         std::cout << "\n";
         int i = 1;
         for (const auto& l : settings::FavoriteLanguages) {
-            std::cout << "  " << i++ << ". [" << l.Name << "] "
-                      << "prefix=" << l.Prefix
-                      << ", signs=" << l.Signs << "\n";
+            std::cout << "  " << theme::Role::MenuNum << i++ << ". ["
+                    << theme::Role::MenuNum << l.Name << "] "
+                    << theme::Role::FileName << "prefix=" << l.Prefix
+                    << ", signs=" << l.Signs << "\n";
         }
-        std::cout << "  По умолчанию: " << settings::DefaultLanguage << "\n\n";
+        std::cout << "  " << theme::Role::MenuNum << "По умолчанию: "
+          << theme::Role::FileName << settings::DefaultLanguage << "\n\n";
     }
 
     static void EditLanguages() {
@@ -3378,15 +3655,16 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "Что сделать?\n";
-                std::cout << "  1. Добавить язык\n";
-                std::cout << "  2. Изменить язык\n";
-                std::cout << "  3. Удалить язык\n";
-                std::cout << "  4. Сменить язык по умолчанию\n";
-                std::cout << "  0. Назад\n> ";
+                std::cout << theme::Role::Question << "Что искать?\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Добавить язык\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Изменить язык\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Удалить язык\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Сменить язык по умолчанию\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3415,10 +3693,10 @@ namespace prompt {
                 info.Signs = ReadLine("Признаки (0 — назад): ");
                 if (GoBack) { GoBack = false; continue; }
                 settings::FavoriteLanguages.push_back(info);
-                std::cout << "\nДобавлено.\n\n";
+                std::cout << theme::Role::Error << "\nДобавлено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 2 && sz > 0) {
-                std::cout << "Введите номер языка: ";
+                std::cout << theme::Role::Question << "Введите номер языка: " << theme::Role::Reset;
                 int k = ReadInt(1, sz);
                 if (GoBack) { GoBack = false; continue; }
                 auto& lang = settings::FavoriteLanguages[k - 1];
@@ -3437,24 +3715,47 @@ namespace prompt {
 
                 if (settings::DefaultLanguage == oldName && !name.empty())
                     settings::DefaultLanguage = name;
-                std::cout << "\nИзменено.\n\n";
+                std::cout << theme::Role::Error << "\nИзменено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 3 && sz > 0) {
-                std::cout << "Введите номер языка: ";
+                std::cout << theme::Role::Question << "Введите номер языка: " << theme::Role::Reset;
                 int k = ReadInt(1, sz);
                 if (GoBack) { GoBack = false; continue; }
                 settings::FavoriteLanguages.erase(
                     settings::FavoriteLanguages.begin() + (k - 1));
-                std::cout << "\nУдалено.\n\n";
+                std::cout << theme::Role::Error << "\nУдалено.\n" << theme::Role::Reset << "\n";
             }
             else if (n == 4 && sz > 0) {
-                std::cout << "Введите номер языка: ";
+                std::cout << theme::Role::Question << "Введите номер языка: " << theme::Role::Reset;
                 int k = ReadInt(1, sz);
                 if (GoBack) { GoBack = false; continue; }
                 settings::DefaultLanguage = settings::FavoriteLanguages[k - 1].Name;
-                std::cout << "\nПо умолчанию: "
-                          << settings::DefaultLanguage << "\n\n";
+                std::cout << theme::Role::Default << "\n" << theme::Role::Error << "По умолчанию: "
+                    << theme::Role::FileName << settings::DefaultLanguage << "\n\n";
             }
+        }
+    }
+    
+    static void EditTheme() {
+        std::vector<std::string> themeNames;
+        for (const auto& kv : theme::AllThemes) themeNames.push_back(kv.first);
+        std::sort(themeNames.begin(), themeNames.end());
+
+        while (true) {
+            std::cout << "\n" << theme::Role::Question << "Выберите тему:\n" << theme::Role::Reset;
+            for (size_t i = 0; i < themeNames.size(); ++i) {
+                std::string mark = (themeNames[i] == settings::CurrentTheme) ? " (активна)" : "";
+                std::cout << "  " << theme::Role::MenuNum << (i + 1) << "." << theme::Role::Default << " " 
+                          << themeNames[i] << theme::Role::Dim << mark << "\n";
+            }
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
+
+            int n = ReadInt(0, (int)themeNames.size());
+            if (GoBack || n == 0) return;
+
+            settings::CurrentTheme = themeNames[n - 1];
+            theme::ApplyTheme(settings::CurrentTheme);
+            settings::Save();
         }
     }
 
@@ -3464,17 +3765,18 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "\n=== НАСТРОЙКИ ===\n\n";
-                std::cout << "  1. Расширения по языкам\n";
-                std::cout << "  2. Исключённые папки\n";
-                std::cout << "  3. Исключённые файлы\n";
-                std::cout << "  4. Максимальный размер файла\n";
-                std::cout << "  5. Вывод\n";
-                std::cout << "  6. Языки\n";
-                std::cout << "  0. Сохранить и выйти\n> ";
+                std::cout << "\n" << theme::Role::Title << "=== НАСТРОЙКИ ===\n\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Расширения по языкам\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Исключённые папки\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Исключённые файлы\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Максимальный размер файла\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Вывод\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Языки\n";
+                std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Цветовая тема\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Сохранить и выйти\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string input;
@@ -3490,9 +3792,9 @@ namespace prompt {
 
             if (n == 0) {
                 if (settings::Save()) {
-                    std::cout << "\nСохранено в settings.json.\n\n";
+                    std::cout << theme::Role::Default << "\nСохранено в settings.json.\n" << theme::Role::Reset << "\n";
                 } else {
-                    std::cout << "\nОшибка сохранения.\n\n";
+                    std::cout << theme::Role::Error << "\nОшибка сохранения.\n" << theme::Role::Reset << "\n";
                 }
                 return;
             }
@@ -3506,6 +3808,7 @@ namespace prompt {
                 case 4: EditMaxFileSizeSets(); break;
                 case 5: EditOutputSettings(); break;
                 case 6: EditLanguages(); break;
+                case 7: EditTheme(); break;
             }
         }
     }
@@ -3541,22 +3844,21 @@ namespace prompt {
                     dirLabel = utf8::ToUtf8(opt.Directory);
                 }
 
-                std::cout << "\n";
-                std::cout << "Измените параметры поиска:\n";
-                std::cout << "  1. Начать поиск\n";
-                std::cout << "  2. Директория: " << dirLabel << "\n";
-                std::cout << "  3. Расширения: " << FormatSet(opt.Extensions) << "\n";
-                std::cout << "  4. Исключённые папки: " << FormatSet(opt.ExcludeDirs) << "\n";
-                std::cout << "  5. Исключённые файлы: " << FormatSet(opt.ExcludeFiles) << "\n";
-                std::cout << "  6. Максимальный размер: "
-                    << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ")
-                    << "\n";
+                std::cout << theme::Role::Reset << "\n";
+                std::cout << theme::Role::Question << "Измените параметры поиска:\n" << theme::Role::Reset;
+                std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Начать поиск\n";
+                std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Директория: " << theme::Role::FileName << dirLabel << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Расширения: " << theme::Role::FileName << FormatSet(opt.Extensions) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Исключённые папки: " << theme::Role::FileName << FormatSet(opt.ExcludeDirs) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Исключённые файлы: " << theme::Role::FileName << FormatSet(opt.ExcludeFiles) << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Максимальный размер: " 
+                    << theme::Role::FileName << (opt.MaxFileSizeMb < 0 ? std::string("без лимита") : std::to_string(opt.MaxFileSizeMb) + " МБ") << "\n";
                 if (req.Type == regex_builder::SearchType::Comment)
-                    std::cout << "  7. Язык: " << req.Language << "\n";
-                std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Язык: " << theme::Role::FileName << req.Language << "\n";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Отмена\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
-                std::cout << "> ";
+                std::cout << theme::Role::Question << "> " << theme::Role::Reset;
             }
 
             std::string choice;
@@ -3588,21 +3890,21 @@ namespace prompt {
                     if (fs::exists(dirPath) && fs::is_directory(dirPath))
                         opt.Directory = dirPath;
                     else
-                        std::cout << colors::Error << "Директория не найдена: " << dir << colors::Reset << "\n";
+                        std::cout << theme::Role::Error << "Директория не найдена: " << dir << theme::Role::Reset << "\n";
                 }
             }
 
             else if (choice == "3") {
                 if (!settings::ExtensionSets.empty()) {
-                    std::cout << "\nВыберите сет расширений:\n";
+                    std::cout << "\n" << theme::Role::Question << "Выберите сет расширений:\n" << theme::Role::Reset;
                     int i = 1;
                     std::vector<std::string> keys;
                     for (const auto& kv : settings::ExtensionSets) {
-                        std::cout << "  " << i++ << ". " << kv.first
-                                  << " — " << FormatSet(kv.second) << "\n";
+                        std::cout << "  " << theme::Role::MenuNum << i++ << "." << theme::Role::Default << " " << kv.first
+                                  << " — " << theme::Role::FileName << FormatSet(kv.second) << "\n";
                         keys.push_back(kv.first);
                     }
-                    std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Отмена\n" << theme::Role::Question << "> ";
                     int n = ReadInt(0, (int)keys.size());
                     if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.Extensions = settings::ExtensionSets[keys[n - 1]];
@@ -3610,15 +3912,15 @@ namespace prompt {
             }
             else if (choice == "4") {
                 if (!settings::ExcludeDirSets.empty()) {
-                    std::cout << "\nВыберите сет папок:\n";
+                    std::cout << theme::Role::MenuItem << "\nВыберите сет папок:\n" << theme::Role::Reset;
                     int i = 1;
                     std::vector<std::string> keys;
                     for (const auto& kv : settings::ExcludeDirSets) {
-                        std::cout << "  " << i++ << ". " << kv.first
+                        std::cout << "  " << theme::Role::MenuNum << i++ << ". " << theme::Role::Reset << kv.first
                                   << " — " << FormatSet(kv.second) << "\n";
                         keys.push_back(kv.first);
                     }
-                    std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Отмена\n" << theme::Role::Question << "> ";
                     int n = ReadInt(0, (int)keys.size());
                     if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.ExcludeDirs = settings::ExcludeDirSets[keys[n - 1]];
@@ -3626,33 +3928,33 @@ namespace prompt {
             }
             else if (choice == "5") {
                 if (!settings::ExcludeFileSets.empty()) {
-                    std::cout << "\nВыберите сет файлов:\n";
+                    std::cout << theme::Role::MenuItem << "\nВыберите сет файлов:\n" << theme::Role::Reset;
                     int i = 1;
                     std::vector<std::string> keys;
                     for (const auto& kv : settings::ExcludeFileSets) {
-                        std::cout << "  " << i++ << ". " << kv.first
+                        std::cout << "  " << theme::Role::MenuNum << i++ << ". " << theme::Role::Reset << kv.first
                                   << " — " << FormatSet(kv.second) << "\n";
                         keys.push_back(kv.first);
                     }
-                    std::cout << "  0. Отмена\n> ";
+                    std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Отмена\n" << theme::Role::Question << "> ";
                     int n = ReadInt(0, (int)keys.size());
                     if (GoBack) { GoBack = false; printMenu = true; continue; }
                     if (n > 0) opt.ExcludeFiles = settings::ExcludeFileSets[keys[n - 1]];
                 }
             }
             else if (choice == "6") {
-                std::cout << "Максимум МБ (-1 — без лимита, 0 — 0 МБ): ";
+                std::cout << theme::Role::Question << "Максимум МБ (-1 — без лимита, 0 — 0 МБ): " << theme::Role::Reset;
                 int mb = ReadInt(-1, 10000);
                 opt.MaxFileSizeMb = mb;
             }
 
             else if (choice == "7" && req.Type == regex_builder::SearchType::Comment) {
-                std::cout << "\nВыберите язык:\n";
+                std::cout << theme::Role::MenuItem << "\nВыберите язык:\n" << theme::Role::Reset;
                 for (size_t i = 0; i < settings::FavoriteLanguages.size(); ++i) {
                     const auto& l = settings::FavoriteLanguages[i];
-                    std::cout << "  " << (i + 1) << ". " << l.Name << " (" << l.Prefix << ")\n";
+                    std::cout << "  " << theme::Role::MenuNum << (i + 1) << ". " << theme::Role::Reset << l.Name << " (" << l.Prefix << ")\n";
                 }
-                std::cout << "  0. Отмена\n> ";
+                std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Reset << " Отмена\n" << theme::Role::Question << "> ";
                 int langIdx = ReadInt(0, (int)settings::FavoriteLanguages.size());
                 if (langIdx > 0) {
                     req.Language = settings::FavoriteLanguages[langIdx - 1].Name;
@@ -4020,6 +4322,7 @@ namespace regex_builder {
 
 
 #include "Colors.h"
+#include "Colors.h"
 #pragma once
 #include <string>
 #include <vector>
@@ -4106,12 +4409,14 @@ namespace settings {
     inline int FallbackMaxFileSizeMb = 200;
 
     inline int ShowFirstN = 50;
+    inline std::string CurrentTheme = "default";
     inline std::string ResultsFile = "search_results.txt";
 
     inline std::vector<LanguageInfo> FavoriteLanguages;
     inline std::string DefaultLanguage = "C#";
 
-        inline void SetDefaults() {
+    inline void SetDefaults() {
+        if (CurrentTheme.empty()) CurrentTheme = "default";
         if (ExtensionSets.empty()) {
             ExtensionSets["C#"]      = {".cs"};
             ExtensionSets["C++"]     = {".cpp", ".h", ".hpp"};
@@ -4190,6 +4495,7 @@ namespace settings {
                     if (!info.Name.empty()) FavoriteLanguages.push_back(info);
                 }
             }
+                        if (j.contains("active_theme")) CurrentTheme = j["active_theme"];
             if (j.contains("default_language")) DefaultLanguage = j["default_language"];
         } catch (const std::exception& e) { std::cerr << "Ошибка чтения JSON: " << e.what() << "\n"; return false; }
         SetDefaults();
@@ -4207,6 +4513,7 @@ namespace settings {
     inline bool Save(const std::string& path = "settings.json") {
         json j;
         j["extension_sets"] = ExtensionSets;
+        j["active_theme"] = CurrentTheme;
         j["default_extension_set"] = DefaultExtensionSet;
         j["fallback_extensions"] = FallbackExtensions;
         j["exclude_dir_sets"] = ExcludeDirSets;
@@ -4457,9 +4764,9 @@ namespace settings {
 {
   "default_exclude_dir_set": "Default",
   "default_exclude_file_set": "None",
-  "default_extension_set": "C++",
-  "default_language": "C#",
-  "default_max_file_size_set": "До 10 МБ",
+  "default_extension_set": "C#",
+  "default_language": "C++",
+  "default_max_file_size_set": "Все читать",
   "exclude_dir_sets": {
     "Default": [
       "bin",
@@ -4480,6 +4787,9 @@ namespace settings {
     ]
   },
   "exclude_file_sets": {
+    "1": [
+      "1"
+    ],
     "C#": [
       "*.FileSearcher.cs",
       "*.g.cs"
@@ -4500,9 +4810,6 @@ namespace settings {
       ".h",
       ".hpp",
       ".cs"
-    ],
-    "Python": [
-      ".py"
     ],
     "Web": [
       ".js",
@@ -4553,7 +4860,7 @@ namespace settings {
   },
   "output": {
     "results_file": "search_results.txt",
-    "show_first_n": 50
+    "show_first_n": 100
   }
 }
 
@@ -6354,102 +6661,205 @@ namespace utf8 {
 }
 
 ======================================================================
-# ФАЙЛ: test\test.cpp
+# ФАЙЛ: .vscode\settings.json
+======================================================================
+
+{
+    "cmake.sourceDirectory": "C:/Users/ggg84/OneDrive/Desktop/Projects/ConsoleProjects/CodeSearch/utils"
+}
+
+======================================================================
+# ФАЙЛ: utils\colors.cpp
 ======================================================================
 
 #include <iostream>
+#include <vector>
+#include <string>
+#include <iomanip>
+#include <algorithm>
+#include <cmath>
+#include <set>
 
-class Lamp{
-    private:
-        std::string name;
-        int brightness;
-        std::string color;
-    
-    public:
-        Lamp(std::string Name, int Brightness, std::string Color){
-            name = Name;
-            brightness = Brightness;
-            color = Color;
-        };
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
-        void turnOn(){
-
-        }
-
-        void turnOff(){
-
-        }
-
-        void setBrightness(){
-
-        }
-
-        void setColor(){
-
-        }
-
-        void getStatus(){
-            return info;
-        }
-
+struct Color {
+    int code;
+    int r, g, b;
+    std::string hex;
 };
 
-void addLamp(std::string name, int brightness, std::string color){
-    Lamp lamp(name, brightness, color);
+std::string ToHex(int r, int g, int b) {
+    char buf[10];
+    snprintf(buf, sizeof(buf), "#%02x%02x%02x", r, g, b);
+    return std::string(buf);
 }
 
-void printMenu(){
-    std::cout<<"Что хотите сделать?"<<std::endl;
-    std::cout<<"1. Создать лампу"<<std::endl;
-    std::cout<<"2. Вывести статус лампы"<<std::endl;
-    std::cout<<"3. Поменять яркость лампы"<<std::endl;
-    std::cout<<"4. Поменять цвет лампы"<<std::endl;
-}
-
-int main(){
-    std::string color;
-    std::cout<<"Привествую!"<<std::endl;
-    bool stop = false;
-    int choose;
-    std::string name;
-    int brightness;
-    std::string color;
-    while (stop){
-        printMenu();
-        if (choose == 1){
-            std::cout<<"Введите название лампы: ";
-            std::cin >> name;
-            std::cout<<"Введите яркость лампы: ";
-            std::cin >> brightness;
-            std::cout<<"Введите цвет лампы: ";
-            std::cin >> color;
-            addLamp(name, brightness, color);
-            
+// Функция, которая применяет алгоритм "Ближайший сосед" к любому списку
+void ApplyTSP(std::vector<Color>& list) {
+    if (list.empty()) return;
+    std::vector<Color> sorted;
+    std::vector<bool> visited(list.size(), false);
+    
+    // Находим самый темный цвет, чтобы начать с него (или черный)
+    int current = 0; 
+    double min_l = 999;
+    for (size_t i = 0; i < list.size(); ++i) {
+        double l = 0.299 * list[i].r + 0.587 * list[i].g + 0.114 * list[i].b;
+        if (l < min_l) {
+            min_l = l;
+            current = i;
         }
-        
-        if (choose == 2){
-            getStatus();
-        }
-
-        if (choose == 3){
-            
-        }
-
-        if (choose == 4){
-            
-        }
-
-        if (choose == 5){
-            
-        }
-
-        if (choose == 0){
-            stop = true;
-        }
-
-        continue;
     }
 
+    sorted.push_back(list[current]);
+    visited[current] = true;
+
+    for (size_t step = 1; step < list.size(); ++step) {
+        int next_color = -1;
+        double min_dist = 999999.0;
+
+        for (size_t i = 0; i < list.size(); ++i) {
+            if (visited[i]) continue;
+            
+            double dr = list[current].r - list[i].r;
+            double dg = list[current].g - list[i].g;
+            double db = list[current].b - list[i].b;
+            double dist = 2.0 * dr * dr + 4.0 * dg * dg + 3.0 * db * db; 
+
+            if (dist < min_dist) {
+                min_dist = dist;
+                next_color = i;
+            }
+        }
+
+        if (next_color != -1) {
+            current = next_color;
+            visited[current] = true;
+            sorted.push_back(list[current]);
+        }
+    }
+    list = sorted; // Заменяем исходный массив на отсортированный
+}
+
+int main() {
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+    SetConsoleCP(CP_UTF8);
+    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+    if (hOut != INVALID_HANDLE_VALUE) {
+        DWORD mode = 0;
+        if (GetConsoleMode(hOut, &mode))
+            SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+    }
+#endif
+
+    std::vector<Color> colors;
+    for (int i = 0; i < 256; ++i) {
+        int r, g, b;
+        if (i < 16) {
+            int base[16][3] = {
+                {0,0,0}, {128,0,0}, {0,128,0}, {128,128,0}, {0,0,128}, {128,0,128}, {0,128,128}, {192,192,192},
+                {128,128,128}, {255,0,0}, {0,255,0}, {255,255,0}, {0,0,255}, {255,0,255}, {0,255,255}, {255,255,255}
+            };
+            r = base[i][0]; g = base[i][1]; b = base[i][2];
+        } else if (i < 232) {
+            int levels[6] = {0, 95, 135, 175, 215, 255};
+            int idx = i - 16;
+            r = levels[idx / 36];
+            g = levels[(idx % 36) / 6];
+            b = levels[idx % 6];
+        } else {
+            int v = 8 + (i - 232) * 10;
+            r = v; g = v; b = v;
+        }
+        colors.push_back({i, r, g, b, ToHex(r, g, b)});
+    }
+
+    // Твой огромный список изгнанных
+    std::set<int> excludedCodes = {
+        138, 174, 210, 209, 173, 180, 144, 181, 104, 68, 67, 103, 97, 61, 60, 96,
+        176, 140, 139, 175, 205, 169, 133, 132, 131, 95, 101, 65, 66, 137, 136, 100, 64, 58,
+        130, 94, 29, 148, 184, 220, 226, 190, 154, 98, 62, 56, 92, 128, 163, 127, 91, 55, 54, 90, 126, 162,
+        134, 164, 219, 207, 206,
+        49, 48, 47, 50, 51,
+        55, 56, 58, 60, 61, 62, 64, 65, 66, 67, 68, 90, 91, 92, 94, 95, 96, 97, 98, 100, 101, 103, 104, 
+        126, 127, 128, 130, 131, 132, 133, 134, 136, 137, 138, 139, 140, 144, 148, 154, 162, 163, 164, 
+        169, 173, 174, 175, 176, 180, 181, 184, 190, 205, 206, 207, 209, 210, 219, 220, 226, 208, 202, 204, 203
+    };
+    
+    std::vector<Color> baseColors;
+    std::vector<Color> gradColors;
+    std::vector<Color> excludedColors;
+
+    for (int i = 0; i < 256; ++i) {
+        if (i < 16) {
+            baseColors.push_back(colors[i]);
+        } else if (excludedCodes.count(i)) {
+            excludedColors.push_back(colors[i]);
+        } else {
+            gradColors.push_back(colors[i]);
+        }
+    }
+
+    // 1. Строим идеальный градиент для оставшихся
+    ApplyTSP(gradColors);
+
+    // 2. Строим градиент для изгнанных цветов
+    ApplyTSP(excludedColors);
+
+    // 3. РУЧНАЯ КОРРЕКТИРОВКА (208 перед 202, 204 после 203)
+    auto get_color = [&](int code) {
+        return *std::find_if(colors.begin(), colors.end(), [code](const Color& c){ return c.code == code; });
+    };
+    
+    auto remove_code = [&](int code) {
+        excludedColors.erase(std::remove_if(excludedColors.begin(), excludedColors.end(), [code](const Color& c) { return c.code == code; }), excludedColors.end());
+    };
+
+    // Вынимаем эти 4 цвета из списка
+    remove_code(208); remove_code(202); remove_code(204); remove_code(203);
+
+    // Вставляем 208 перед 202
+    auto it202 = std::find_if(excludedColors.begin(), excludedColors.end(), [](const Color& c){ return c.code == 202; });
+    if (it202 != excludedColors.end()) {
+        excludedColors.insert(it202, get_color(208));
+    }
+
+    // Вставляем 204 после 203
+    auto it203 = std::find_if(excludedColors.begin(), excludedColors.end(), [](const Color& c){ return c.code == 203; });
+    if (it203 != excludedColors.end()) {
+        excludedColors.insert(it203 + 1, get_color(204));
+    }
+
+    // 4. ВЫВОД
+    std::cout << "=== БАЗОВЫЕ 16 ЦВЕТОВ ===\n";
+    std::cout << "=====================================================\n";
+    for (const auto& c : baseColors) {
+        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        int fg_color = (luminance > 128) ? 0 : 15;
+        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
+                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
+    }
+
+    std::cout << "\n=== ОСНОВНОЙ ГРАДИЕНТ ===\n";
+    std::cout << "=====================================================\n";
+    for (const auto& c : gradColors) {
+        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        int fg_color = (luminance > 128) ? 0 : 15;
+        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
+                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
+    }
+
+    std::cout << "\n=== ИЗГНАННЫЕ ЦВЕТА (Выстроены в градиент) ===\n";
+    std::cout << "=====================================================\n";
+    for (const auto& c : excludedColors) {
+        double luminance = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b;
+        int fg_color = (luminance > 128) ? 0 : 15;
+        std::cout << "\033[48;5;" << c.code << "m" << "\033[38;5;" << fg_color << "m"
+                  << "  " << std::setw(3) << c.code << "  | HEX: " << c.hex << "  \033[0m\n";
+    }
 
     return 0;
 }

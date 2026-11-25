@@ -1,4 +1,4 @@
-
+#include <stdlib.h>
 #include <cstdio>
 #include <iostream>
 #include <string>
@@ -397,7 +397,7 @@ void PrintActionMenu(bool isInFavorites, bool hasResults) {
     std::cout << "  " << theme::Role::MenuNum << "8." << theme::Role::Default << " Настройки\n";
     if (isInFavorites) std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Удалить из избранного\n";
     if (hasResults)   std::cout << "  " << theme::Role::MenuNum << "9." << theme::Role::Default << " Выписать в файл\n";
-    std::cout << theme::Role::Question << theme::Role::Match << "> " << theme::Role::Reset;
+    std::cout << theme::Role::Question << "> " << theme::Role::Reset;
 }
 
 void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
@@ -639,21 +639,24 @@ void RunActionMenu(regex_builder::SearchRequest req, std::string pattern) {
 }
 
 int main() {
-#ifdef _WIN32
-    SetConsoleOutputCP(CP_UTF8);
-    SetConsoleCP(CP_UTF8);
+    #ifdef _WIN32
+        _putenv_s("TERM", "xterm-256color");
+        _putenv_s("COLORTERM", "truecolor");
+        SetConsoleOutputCP(CP_UTF8);
+        SetConsoleCP(CP_UTF8);
 
-    // Включить обработку ANSI-кодов (цветов) в Windows Console
-    HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
-    if (hOut != INVALID_HANDLE_VALUE) {
-        DWORD mode = 0;
-        if (GetConsoleMode(hOut, &mode))
-            SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
-    }
-#endif
+        // Включить обработку ANSI-кодов (цветов) в Windows Console
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (hOut != INVALID_HANDLE_VALUE) {
+            DWORD mode = 0;
+            if (GetConsoleMode(hOut, &mode))
+                SetConsoleMode(hOut, mode | ENABLE_VIRTUAL_TERMINAL_PROCESSING);
+        }
+    #endif
 
     settings::Load("settings.json");
-    theme::SetNewTheme();
+    theme::InitThemes();
+    theme::ApplyTheme(settings::CurrentTheme);
     settings::LoadHistory();
     settings::LoadFavorites();
     settings::LoadClipboardHistory();

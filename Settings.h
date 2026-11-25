@@ -87,12 +87,14 @@ namespace settings {
     inline int FallbackMaxFileSizeMb = 200;
 
     inline int ShowFirstN = 50;
+    inline std::string CurrentTheme = "default";
     inline std::string ResultsFile = "search_results.txt";
 
     inline std::vector<LanguageInfo> FavoriteLanguages;
     inline std::string DefaultLanguage = "C#";
 
-        inline void SetDefaults() {
+    inline void SetDefaults() {
+        if (CurrentTheme.empty()) CurrentTheme = "default";
         if (ExtensionSets.empty()) {
             ExtensionSets["C#"]      = {".cs"};
             ExtensionSets["C++"]     = {".cpp", ".h", ".hpp"};
@@ -171,6 +173,7 @@ namespace settings {
                     if (!info.Name.empty()) FavoriteLanguages.push_back(info);
                 }
             }
+                        if (j.contains("active_theme")) CurrentTheme = j["active_theme"];
             if (j.contains("default_language")) DefaultLanguage = j["default_language"];
         } catch (const std::exception& e) { std::cerr << "Ошибка чтения JSON: " << e.what() << "\n"; return false; }
         SetDefaults();
@@ -188,6 +191,7 @@ namespace settings {
     inline bool Save(const std::string& path = "settings.json") {
         json j;
         j["extension_sets"] = ExtensionSets;
+        j["active_theme"] = CurrentTheme;
         j["default_extension_set"] = DefaultExtensionSet;
         j["fallback_extensions"] = FallbackExtensions;
         j["exclude_dir_sets"] = ExcludeDirSets;

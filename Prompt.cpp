@@ -1206,6 +1206,29 @@ namespace prompt {
             }
         }
     }
+    
+    static void EditTheme() {
+        std::vector<std::string> themeNames;
+        for (const auto& kv : theme::AllThemes) themeNames.push_back(kv.first);
+        std::sort(themeNames.begin(), themeNames.end());
+
+        while (true) {
+            std::cout << "\n" << theme::Role::Question << "Выберите тему:\n" << theme::Role::Reset;
+            for (size_t i = 0; i < themeNames.size(); ++i) {
+                std::string mark = (themeNames[i] == settings::CurrentTheme) ? " (активна)" : "";
+                std::cout << "  " << theme::Role::MenuNum << (i + 1) << "." << theme::Role::Default << " " 
+                          << themeNames[i] << theme::Role::Dim << mark << "\n";
+            }
+            std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Назад\n> ";
+
+            int n = ReadInt(0, (int)themeNames.size());
+            if (GoBack || n == 0) return;
+
+            settings::CurrentTheme = themeNames[n - 1];
+            theme::ApplyTheme(settings::CurrentTheme);
+            settings::Save();
+        }
+    }
 
     // ============ ГЛАВНОЕ МЕНЮ НАСТРОЕК ============
 
@@ -1213,13 +1236,14 @@ namespace prompt {
         bool printMenu = true;
         while (true) {
             if (printMenu) {
-                std::cout << "\n" << theme::Role::Title << "=== НАСТРОЙКИ ===\n\n" << theme::Role::Reset;
+                std::cout << "\n" << theme::Role::Title << "=== НАСТРОЙКИ ===\n" << theme::Role::Reset;
                 std::cout << "  " << theme::Role::MenuNum << "1." << theme::Role::Default << " Расширения по языкам\n";
                 std::cout << "  " << theme::Role::MenuNum << "2." << theme::Role::Default << " Исключённые папки\n";
                 std::cout << "  " << theme::Role::MenuNum << "3." << theme::Role::Default << " Исключённые файлы\n";
                 std::cout << "  " << theme::Role::MenuNum << "4." << theme::Role::Default << " Максимальный размер файла\n";
                 std::cout << "  " << theme::Role::MenuNum << "5." << theme::Role::Default << " Вывод\n";
                 std::cout << "  " << theme::Role::MenuNum << "6." << theme::Role::Default << " Языки\n";
+                std::cout << "  " << theme::Role::MenuNum << "7." << theme::Role::Default << " Цветовая тема\n";
                 std::cout << "  " << theme::Role::MenuNum << "0." << theme::Role::Default << " Сохранить и выйти\n" << theme::Role::Question << "> ";
                 printMenu = false;
             } else {
@@ -1235,7 +1259,7 @@ namespace prompt {
 
             int n = -1;
             try { n = std::stoi(input); } catch (...) { continue; }
-            if (n < 0 || n > 6) continue;
+            if (n < 0 || n > 7) continue;
 
             if (n == 0) {
                 if (settings::Save()) {
@@ -1255,6 +1279,7 @@ namespace prompt {
                 case 4: EditMaxFileSizeSets(); break;
                 case 5: EditOutputSettings(); break;
                 case 6: EditLanguages(); break;
+                case 7: EditTheme(); break;
             }
         }
     }
